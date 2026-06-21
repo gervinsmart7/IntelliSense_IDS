@@ -1,0 +1,12 @@
+pyshark
+scapy
+requests
+firebase-admin
+boto3
+python-dotenv
+pandas
+numpy
+joblib
+scikit-learn
+cicflowmeter
+python-dotenv

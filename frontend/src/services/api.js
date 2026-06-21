@@ -1,0 +1,114 @@
+import axios from 'axios'
+
+const API_URL = 'http://localhost:8000'
+
+const api = axios.create({
+  baseURL: API_URL,
+  headers: { 'Content-Type': 'application/json' }
+})
+
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = 'Bearer ' + token
+  }
+  return config
+})
+
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      localStorage.clear()
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
+export const authAPI = {
+  login: (email, password) =>
+    api.post('/api/auth/login', { email, password }),
+  logout: () =>
+    api.post('/api/auth/logout'),
+  getMe: () =>
+    api.get('/api/auth/me'),
+  changePassword: (current_password, new_password) =>
+    api.post('/api/auth/change-password', {
+      current_password, new_password
+    })
+}
+
+export const orgAPI = {
+  register: (data) =>
+    api.post('/api/organisations/register', data),
+  verifyEmail: (token) =>
+    api.post('/api/organisations/verify-email/' + token),
+  getAll: () =>
+    api.get('/api/organisations'),
+  getOne: (orgId) =>
+    api.get('/api/organisations/' + orgId),
+  update: (orgId, data) =>
+    api.put('/api/organisations/' + orgId, data),
+  suspend: (orgId) =>
+    api.post('/api/organisations/' + orgId + '/suspend'),
+  reinstate: (orgId) =>
+    api.post('/api/organisations/' + orgId + '/reinstate'),
+  delete: (orgId) =>
+    api.delete('/api/organisations/' + orgId),
+  regenerateKey: (orgId) =>
+    api.post('/api/organisations/' + orgId + '/regenerate-key')
+}
+
+export const modelAPI = {
+  getVersions: () =>
+    api.get('/api/model/versions'),
+  getProduction: () =>
+    api.get('/api/model/production'),
+  triggerRetrain: (reason) =>
+    api.post('/api/model/retrain', { reason }),
+  pushModel: (version) =>
+    api.post('/api/model/push/' + version),
+  rollback: (version) =>
+    api.post('/api/model/rollback/' + version),
+  getRetrainJobs: () =>
+    api.get('/api/model/retrain/jobs')
+}
+
+export const analyticsAPI = {
+  getOverview: () =>
+    api.get('/api/analytics/overview'),
+  getTraffic: (orgId, period) =>
+    api.get('/api/analytics/traffic/' + orgId, { params: { period } }),
+  getAttackTypes: (orgId) =>
+    api.get('/api/analytics/attack-types/' + orgId),
+  getSeverity: (orgId) =>
+    api.get('/api/analytics/severity/' + orgId),
+  getTopIPs: (orgId) =>
+    api.get('/api/analytics/top-ips/' + orgId),
+  getTopPorts: (orgId) =>
+    api.get('/api/analytics/top-ports/' + orgId),
+  getGlobal: () =>
+    api.get('/api/analytics/global'),
+  getRisk: (orgId) =>
+    api.get('/api/analytics/risk/' + orgId),
+  getRiskRanking: () =>
+    api.get('/api/analytics/risk-ranking')
+}
+
+export const alertsAPI = {
+  getAll: (params) =>
+    api.get('/api/alerts', { params }),
+  getOne: (alertId) =>
+    api.get('/api/alerts/' + alertId),
+  updateStatus: (alertId, status, note) =>
+    api.put('/api/alerts/' + alertId + '/status', { status, note }),
+  submitFeedback: (alertId, isFalsePositive, note) =>
+    api.post('/api/alerts/' + alertId + '/feedback', {
+      alert_id: alertId,
+      is_false_positive: isFalsePositive,
+      note
+    })
+}
+
+export default api

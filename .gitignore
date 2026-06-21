@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+
+# Node / React
+node_modules/
+dist/
+build/
+.vite/
+
+# Environment variables (NEVER commit these)
+.env
+.env.local
+.env.*.local
+
+# Firebase credentials (NEVER commit this)
+firebase-key.json
+*-firebase-adminsdk-*.json
+
+# AWS credentials (NEVER commit this)
+.aws/
+credentials
+
+# ML models and datasets (too large for git)
+*.pkl
+*.csv
+ml/datasets/*.csv
+agent/models/*.pkl
+agent/captures/*.pcap
+agent/flows/*.csv
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# PyInstaller build artifacts
+agent/build/
+agent/dist/
+*.spec
+
+# Misc
+.firebase/
+firebase-debug.log
+ngrok.log

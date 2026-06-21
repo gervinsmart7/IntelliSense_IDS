@@ -1,0 +1,15 @@
+{
+  "version": "v1.0",
+  "trained_at": "2026-06-06T00:23:50.050619",
+  "metrics": {
+    "accuracy": 0.9977265838132767,
+    "f1": 0.9977262009076122,
+    "precision": 0.9977278337787603,
+    "recall": 0.9977265838132767
+  },
+  "feature_count": 76,
+  "checksum": "87dd1ac2d692645668c46db934a16c7269a0465fd98f9954cb7c1ecbecbdc492",
+  "model_path": "ml/trained_models/v1.0/ids_model_v1.0.pkl",
+  "encoder_path": "ml/trained_models/v1.0/label_encoder.pkl",
+  "features_path": "ml/trained_models/v1.0/feature_columns.json"
+}
