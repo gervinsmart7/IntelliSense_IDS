@@ -12,6 +12,7 @@ function LogsViewer() {
   const { role, admin } = useAuthStore()
   const [organisations, setOrganisations] = useState([])
   const [selectedOrg, setSelectedOrg] = useState('all')
+  const [selectedOrgData, setSelectedOrgData] = useState(null)
   const [logs, setLogs] = useState([])
   const [search, setSearch] = useState('')
   const [classFilter, setClassFilter] = useState('all')
@@ -34,6 +35,44 @@ function LogsViewer() {
     )
     return unsub
   }, [role, admin])
+
+  useEffect(function() {
+    if (role === 'org_admin' && admin?.org_id) {
+      const unsub = onSnapshot(
+        query(
+          collection(db, 'organisations'),
+          where('org_id', '==', admin.org_id)
+        ),
+        function(snap) {
+          if (!snap.empty) {
+            setSelectedOrgData({ id: snap.docs[0].id, ...snap.docs[0].data() })
+          } else {
+            setSelectedOrgData(null)
+          }
+        }
+      )
+      return unsub
+    }
+
+    if (role !== 'org_admin' && selectedOrg !== 'all') {
+      const unsub = onSnapshot(
+        query(
+          collection(db, 'organisations'),
+          where('org_id', '==', selectedOrg)
+        ),
+        function(snap) {
+          if (!snap.empty) {
+            setSelectedOrgData({ id: snap.docs[0].id, ...snap.docs[0].data() })
+          } else {
+            setSelectedOrgData(null)
+          }
+        }
+      )
+      return unsub
+    }
+
+    setSelectedOrgData(null)
+  }, [role, admin?.org_id, selectedOrg])
 
   useEffect(function() {
     loadLogs()
@@ -88,6 +127,29 @@ function LogsViewer() {
       log.dst_ip?.includes(search)
     )
   })
+
+  const flowMetrics = [
+    {
+      label: 'Flows Captured',
+      value: (selectedOrgData?.flows_captured || 0).toLocaleString(),
+      color: '#34D399'
+    },
+    {
+      label: 'Flows Uploaded',
+      value: (selectedOrgData?.flows_uploaded || 0).toLocaleString(),
+      color: '#6366F1'
+    },
+    {
+      label: 'Agent Status',
+      value: selectedOrgData?.agent_status || 'Unknown',
+      color: selectedOrgData?.agent_status === 'online' ? '#34D399' : '#F87171'
+    },
+    {
+      label: 'Last Sync',
+      value: selectedOrgData?.last_sync?.toDate?.()?.toLocaleString() || 'Never',
+      color: '#FBBF24'
+    }
+  ]
 
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
@@ -151,6 +213,35 @@ function LogsViewer() {
           )
         })}
       </div>
+
+      {(role === 'org_admin' || selectedOrg !== 'all') && (
+        <div className="card" style={{ marginBottom: '24px', padding: '16px 20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                Flow Activity
+              </p>
+              <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                Agent-reported flow counters
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px', marginTop: '16px' }}>
+            {flowMetrics.map(function(item) {
+              return (
+                <div key={item.label} className="stat-card">
+                  <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                    {item.label}
+                  </p>
+                  <p style={{ fontSize: '18px', fontWeight: '700', color: item.color, fontFamily: 'Syne, sans-serif' }}>
+                    {item.value}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -252,7 +343,7 @@ function LogsViewer() {
         ) : filtered.length === 0 ? (
           <div style={{ padding: '48px', textAlign: 'center' }}>
             <FileText size={40} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
-            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>No logs found</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>No alert logs found for this selection.</p>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>

@@ -57,6 +57,37 @@ def send_heartbeat(
         print(f"Heartbeat error: {e}")
         return None
 
+def post_alert(alert_data: dict) -> dict:
+    """
+    Posts a detected alert to the backend
+    ingest endpoint which triggers:
+    - IP reputation check
+    - Temporal correlation (low and slow)
+    - Kill chain detection
+    - Regulatory flag assignment
+    - MITRE enrichment
+    - Email notifications for critical alerts
+
+    This is the ONLY correct way to create
+    alerts — never write to Firestore directly
+    """
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/api/alerts/ingest",
+            headers=HEADERS,
+            json=alert_data,
+            timeout=30
+        )
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"Alert post failed: {response.text}")
+            return None
+    except Exception as e:
+        print(f"Alert post error: {e}")
+        return None
+
+
 def upload_logs(csv_path):
     try:
         with open(csv_path, 'rb') as f:

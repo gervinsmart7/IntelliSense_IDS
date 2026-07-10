@@ -2,6 +2,7 @@ import axios from 'axios'
 
 const API_URL = 'http://localhost:8000'
 
+
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' }
@@ -29,6 +30,10 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (email, password) =>
     api.post('/api/auth/login', { email, password }),
+  forgotPassword: (email) =>
+    api.post('/api/auth/forgot-password', { email }),
+  resetPassword: (token, new_password) =>
+    api.post('/api/auth/reset-password', { token, new_password }),
   logout: () =>
     api.post('/api/auth/logout'),
   getMe: () =>

@@ -7,9 +7,19 @@ import toast from 'react-hot-toast'
 const STEPS = ['Organisation Details', 'Account Details', 'Check Your Email']
 
 const ORG_TYPES = [
-  'Financial', 'Healthcare', 'Education',
-  'Government', 'Technology', 'Retail',
-  'Manufacturing', 'Other'
+  'Commercial Bank',
+  'Investment Bank',
+  'Microfinance Institution',
+  'Insurance Company',
+  'Pension Fund',
+  'Savings and Loans',
+  'Fintech Company',
+  'Payment Service Provider',
+  'Central Bank',
+  'Credit Union',
+  'Forex Bureau',
+  'Securities Firm',
+  'Mobile Money Operator'
 ]
 
 const COUNTRIES = [

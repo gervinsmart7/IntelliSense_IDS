@@ -44,6 +44,38 @@ def send_email(to_email: str, subject: str, html_body: str):
         print(f'Email send error: {e}')
         return False
 
+def send_password_reset_email(email: str, reset_token: str):
+    """
+    Sends a password reset email with a link to the frontend reset page.
+    """
+    reset_url = FRONTEND_URL + '/reset-password/' + reset_token
+
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; background: #0F1117; color: #E2E8F0; padding: 40px; margin: 0;">
+      <div style="max-width: 520px; margin: 0 auto; background: #1A1D27; border-radius: 16px; padding: 40px; border: 1px solid rgba(255,255,255,0.06);">
+        <h1 style="font-size: 24px; font-weight: 700; color: #E2E8F0; margin-bottom: 8px;">Reset your password</h1>
+        <p style="font-size: 14px; color: #94A3B8; line-height: 1.6;">
+          A password reset was requested for your IntelliSense IDS account.
+        </p>
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="{reset_url}" style="display: inline-block; background: #2563EB; color: white; text-decoration: none; padding: 14px 28px; border-radius: 10px; font-weight: bold;">Reset Password</a>
+        </div>
+        <p style="font-size: 12px; color: #64748B; line-height: 1.6; word-break: break-all;">If the button does not work, use this link: <br><br>{reset_url}</p>
+        <p style="font-size: 12px; color: #64748B; text-align: center; margin-top: 24px;">This link expires in 1 hour.</p>
+      </div>
+    </body>
+    </html>
+    """
+
+    return send_email(
+        to_email=email,
+        subject='Reset your IntelliSense IDS password',
+        html_body=html_body
+    )
+
+
 def send_verification_email(
     email: str,
     org_name: str,

@@ -11,6 +11,9 @@ function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
   const navigate = useNavigate()
   const { login } = useAuthStore()
 
@@ -37,6 +40,26 @@ function Login() {
       toast.error(error.response?.data?.detail || 'Login failed')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleForgotPassword(e) {
+    e.preventDefault()
+    if (!forgotEmail) {
+      toast.error('Please enter your email address')
+      return
+    }
+
+    setForgotLoading(true)
+    try {
+      await authAPI.forgotPassword(forgotEmail)
+      toast.success('If that account exists, a reset link has been sent to your email')
+      setShowForgotPassword(false)
+      setForgotEmail('')
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Unable to process password reset request')
+    } finally {
+      setForgotLoading(false)
     }
   }
 
@@ -216,6 +239,7 @@ function Login() {
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
+                onClick={function() { setShowForgotPassword(!showForgotPassword) }}
                 style={{
                   background: 'none', border: 'none',
                   fontSize: '13px', color: 'var(--accent)',
@@ -225,6 +249,27 @@ function Login() {
                 Forgot password?
               </button>
             </div>
+
+            {showForgotPassword && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={function(e) { setForgotEmail(e.target.value) }}
+                  placeholder="Enter your email"
+                  className="input"
+                />
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={forgotLoading}
+                  className="btn-primary"
+                  style={{ justifyContent: 'center', padding: '10px' }}
+                >
+                  {forgotLoading ? 'Sending...' : 'Send reset link'}
+                </button>
+              </div>
+            )}
 
             {/* Submit */}
             <button

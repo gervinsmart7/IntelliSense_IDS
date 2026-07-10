@@ -81,7 +81,7 @@ function AgentStatus() {
       },
       {
         step: 'Download agent',
-        cmd: 'git clone https://github.com/your-repo/intellisense-ids-agent.git'
+        cmd: 'git clone https://github.com/gervinsmart7/intellisense-ids-agent.git'
       },
       {
         step: 'Install dependencies',
@@ -111,7 +111,7 @@ function AgentStatus() {
       },
       {
         step: 'Download agent',
-        cmd: 'git clone https://github.com/your-repo/intellisense-ids-agent.git'
+        cmd: 'git clone https://github.com/gervinsmart7/intellisense-ids-agent.git'
       },
       {
         step: 'Install dependencies',

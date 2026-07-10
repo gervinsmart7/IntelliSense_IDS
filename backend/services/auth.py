@@ -1,8 +1,10 @@
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 import bcrypt
+import hashlib
 from datetime import datetime, timedelta
+from firebase_admin import firestore
 from services.firebase import get_db
 import os
 from dotenv import load_dotenv
@@ -54,6 +56,49 @@ def decode_token(token: str) -> dict:
         return payload
     except JWTError:
         return None
+
+# ─────────────────────────────────────────
+# AGENT AUTH DEPENDENCY
+# ─────────────────────────────────────────
+
+def verify_api_key(api_key: str):
+    if not api_key:
+        return None
+
+    incoming_hash = hashlib.sha256(api_key.encode()).hexdigest()
+
+    orgs = db.collection('organisations').where(
+        filter=firestore.FieldFilter('api_key_hash', '==', incoming_hash)
+    ).get()
+
+    if not orgs:
+        return None
+
+    org = orgs[0].to_dict()
+
+    if org.get('status') != 'active':
+        return None
+
+    return org
+
+
+async def get_agent_org(x_api_key: str = Header(None)):
+    if not x_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="API key required — include X-API-Key header"
+        )
+
+    org = verify_api_key(x_api_key)
+
+    if not org:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or inactive API key"
+        )
+
+    return org
+
 
 # ─────────────────────────────────────────
 # GET CURRENT ADMIN DEPENDENCY

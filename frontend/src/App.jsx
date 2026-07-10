@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 import VerifyEmail from './pages/auth/VerifyEmail'
+import ResetPassword from './pages/auth/ResetPassword'
 import SuperDashboard from './pages/super-admin/SuperDashboard'
 import Organisations from './pages/super-admin/Organisations'
 import ModelManagement from './pages/super-admin/ModelManagement'
@@ -90,10 +91,11 @@ function App() {
         }}
       />
       <Routes>
-        <Route path="/" element={<RootRedirect />} />
+        
         <Route path="/login" element={isAuthenticated ? <RootRedirect /> : <Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/unauthorised" element={<Unauthorised />} />
 
         {/* Super Admin */}
@@ -116,6 +118,7 @@ function App() {
         <Route path="/dashboard/platform/model" element={<ProtectedRoute allowedRoles={['platform_admin']}><ModelManagement /></ProtectedRoute>} />
         <Route path="/dashboard/platform/alerts" element={<ProtectedRoute allowedRoles={['platform_admin']}><Alerts /></ProtectedRoute>} />
         <Route path="/dashboard/platform/alerts/:alertId" element={<ProtectedRoute allowedRoles={['platform_admin']}><AlertDetail /></ProtectedRoute>} />
+        <Route path="/dashboard/platform/admins" element={<ProtectedRoute allowedRoles={['platform_admin']}><AdminManagement /></ProtectedRoute>} />
         <Route path="/dashboard/platform/threat-intel" element={<ProtectedRoute allowedRoles={['platform_admin']}><ThreatIntelligence /></ProtectedRoute>} />
         <Route path = "/dashboard/platform/audit" element={<ProtectedRoute allowedRoles={['platform_admin']}><AuditLogs /></ProtectedRoute>} />
         <Route path ="/dashboard/platform/logs" element={<ProtectedRoute allowedRoles={['platform_admin']}><LogsViewer /></ProtectedRoute>} />

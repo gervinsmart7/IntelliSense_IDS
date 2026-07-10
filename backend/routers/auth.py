@@ -5,12 +5,16 @@ from services.auth import (
     verify_password,
     generate_token,
     decode_token,
-    get_current_admin
+    get_current_admin,
+    hash_password
 )
 from services.audit import log_action
 from services.notifications import NotificationService
+from services.email import send_password_reset_email
 from pydantic import BaseModel
 import os
+import secrets
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 db = get_db()
@@ -37,6 +41,61 @@ class ChangePasswordRequest(BaseModel):
 # ─────────────────────────────────────────
 # ENDPOINTS
 # ─────────────────────────────────────────
+
+@router.post("/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest, request: Request):
+    email = payload.email.lower().strip()
+
+    admins = db.collection('admins').where(
+        filter=firestore.FieldFilter('email', '==', email)
+    ).get()
+
+    if admins:
+        admin = admins[0].to_dict()
+        if admin.get('is_active'):
+            token = secrets.token_urlsafe(32)
+            db.collection('password_reset_tokens').document(token).set({
+                'admin_id': admin['admin_id'],
+                'email': email,
+                'created_at': datetime.utcnow(),
+                'expires_at': datetime.utcnow() + timedelta(hours=1)
+            })
+            send_password_reset_email(email=email, reset_token=token)
+
+    return {
+        "status": "success",
+        "message": "If an account exists, password reset instructions have been sent."
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetPasswordRequest):
+    token_doc = db.collection('password_reset_tokens').document(payload.token).get()
+
+    if not token_doc.exists:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    token_data = token_doc.to_dict()
+    expires_at = token_data.get('expires_at')
+
+    if expires_at and expires_at < datetime.utcnow():
+        db.collection('password_reset_tokens').document(payload.token).delete()
+        raise HTTPException(status_code=400, detail="Reset token has expired")
+
+    admin_id = token_data.get('admin_id')
+    if not admin_id:
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+
+    db.collection('admins').document(admin_id).update({
+        'password_hash': hash_password(payload.new_password)
+    })
+    db.collection('password_reset_tokens').document(payload.token).delete()
+
+    return {
+        "status": "success",
+        "message": "Password updated successfully"
+    }
+
 
 @router.post("/login")
 async def login(payload: LoginRequest, request: Request):
