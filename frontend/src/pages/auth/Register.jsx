@@ -1,25 +1,21 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Shield, CheckCircle, Eye, EyeOff, Mail } from 'lucide-react'
+import { Shield, CheckCircle, Eye, EyeOff, MessageSquare } from 'lucide-react'
 import { orgAPI } from '../../services/api'
+import api from '../../services/api'
 import toast from 'react-hot-toast'
 
-const STEPS = ['Organisation Details', 'Account Details', 'Check Your Email']
+const STEPS = ['Organisation Details', 'Account Details', 'Verify Phone']
 
 const ORG_TYPES = [
   'Commercial Bank',
   'Investment Bank',
-  'Microfinance Institution',
+  'Microfinance',
   'Insurance Company',
-  'Pension Fund',
   'Savings and Loans',
   'Fintech Company',
-  'Payment Service Provider',
   'Central Bank',
-  'Credit Union',
-  'Forex Bureau',
-  'Securities Firm',
-  'Mobile Money Operator'
+  'Credit Union'
 ]
 
 const COUNTRIES = [
@@ -33,7 +29,12 @@ function Register() {
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [registeredEmail, setRegisteredEmail] = useState('')
+
+  // SMS verification state
+  const [verificationToken, setVerificationToken] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
 
   const [form, setForm] = useState({
     name: '',
@@ -65,6 +66,7 @@ function Register() {
     if (!form.admin_name) { toast.error('Admin name is required'); return false }
     if (!form.admin_email) { toast.error('Email is required'); return false }
     if (!form.phone) { toast.error('Phone number is required'); return false }
+    if (!form.phone.startsWith('+')) { toast.error('Phone must include country code e.g. +233...'); return false }
     if (!form.password) { toast.error('Password is required'); return false }
     if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return false }
     if (form.password !== form.confirm_password) { toast.error('Passwords do not match'); return false }
@@ -85,13 +87,58 @@ function Register() {
         admin_email: form.admin_email,
         password: form.password
       })
-      setRegisteredEmail(form.admin_email)
       setStep(2)
-      toast.success('Registration successful — check your email')
+      toast.success('Registration successful — check your phone for the code')
     } catch(e) {
       toast.error(e.response?.data?.detail || 'Registration failed')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleVerifyToken() {
+    if (verificationToken.length !== 6) return
+    setVerifying(true)
+    try {
+      const res = await api.post('/api/organisations/verify-sms', {
+        token: verificationToken,
+        email: form.admin_email
+      })
+      if (res.data.status === 'success') {
+        toast.success('Account verified! You can now log in.')
+        navigate('/login')
+      }
+    } catch(e) {
+      const msg = e.response?.data?.detail || 'Invalid code. Please try again.'
+      toast.error(msg)
+      setVerificationToken('')
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  async function handleResendSMS() {
+    if (resendCooldown > 0 || resending) return
+    setResending(true)
+    try {
+      await api.post('/api/organisations/resend-sms', {
+        email: form.admin_email
+      })
+      toast.success('New code sent to ' + form.phone)
+      setResendCooldown(60)
+      const timer = setInterval(function() {
+        setResendCooldown(function(prev) {
+          if (prev <= 1) {
+            clearInterval(timer)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    } catch(e) {
+      toast.error('Failed to resend code')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -121,7 +168,7 @@ function Register() {
             IntelliSense IDS
           </p>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Register your organisation
+            Register your financial institution
           </p>
         </div>
       </div>
@@ -170,20 +217,22 @@ function Register() {
       {/* Card */}
       <div className="card" style={{ width: '100%', maxWidth: '480px' }}>
 
-        {/* Step 0 — Organisation Details */}
+        {/* ─────────────────────────────────────────
+            STEP 0 — Organisation Details
+        ───────────────────────────────────────── */}
         {step === 0 && (
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: 'Syne, sans-serif', marginBottom: '4px' }}>
               Organisation Details
             </h2>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
-              Tell us about your organisation
+              Tell us about your financial institution
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  Organisation Name
+                  Institution Name
                 </label>
                 <input
                   type="text"
@@ -256,8 +305,6 @@ function Register() {
                   />
                 </div>
               </div>
-
-              
             </div>
 
             <button
@@ -277,7 +324,9 @@ function Register() {
           </div>
         )}
 
-        {/* Step 1 — Account Details */}
+        {/* ─────────────────────────────────────────
+            STEP 1 — Account Details
+        ───────────────────────────────────────── */}
         {step === 1 && (
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: 'Syne, sans-serif', marginBottom: '4px' }}>
@@ -312,12 +361,9 @@ function Register() {
                   placeholder="you@organisation.com"
                   className="input"
                 />
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  A verification link will be sent to this email
-                </p>
               </div>
 
-<div>
+              <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '6px' }}>
                   Phone Number
                 </label>
@@ -325,9 +371,12 @@ function Register() {
                   type="tel"
                   value={form.phone}
                   onChange={function(e) { handleChange('phone', e.target.value) }}
-                  placeholder="e.g. +233 24 000 0000"
+                  placeholder="+233 24 000 0000"
                   className="input"
                 />
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Include country code — a 6-digit verification code will be sent here
+                </p>
               </div>
 
               <div>
@@ -387,82 +436,143 @@ function Register() {
           </div>
         )}
 
-        {/* Step 2 — Check Email */}
+        {/* ─────────────────────────────────────────
+            STEP 2 — SMS Verification
+        ───────────────────────────────────────── */}
         {step === 2 && (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{
-              width: '72px', height: '72px',
-              background: 'rgba(99,102,241,0.1)',
-              borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 20px'
-            }}>
-              <Mail size={36} color="var(--accent)" />
+          <div>
+            {/* Icon */}
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{
+                width: '72px', height: '72px',
+                background: 'rgba(99,102,241,0.1)',
+                border: '2px solid rgba(99,102,241,0.2)',
+                borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 16px'
+              }}>
+                <MessageSquare size={32} color="var(--accent)" />
+              </div>
+              <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: 'Syne, sans-serif', marginBottom: '8px' }}>
+                Verify Your Phone
+              </h2>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                We sent a 6-digit code to
+              </p>
+              <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--accent)', marginTop: '4px', fontFamily: 'JetBrains Mono, monospace' }}>
+                {form.phone}
+              </p>
             </div>
 
-            <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: 'Syne, sans-serif', marginBottom: '8px' }}>
-              Check your email
-            </h2>
+            {/* Token input */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '8px', textAlign: 'center' }}>
+                Enter Verification Code
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={verificationToken}
+                onChange={function(e) {
+                  const val = e.target.value.replace(/\D/g, '')
+                  setVerificationToken(val)
+                }}
+                placeholder="000000"
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: 'var(--bg-elevated)',
+                  border: '2px solid ' + (
+                    verificationToken.length === 6
+                      ? 'var(--accent)'
+                      : 'var(--border)'
+                  ),
+                  borderRadius: '10px',
+                  color: 'var(--text-primary)',
+                  fontSize: '32px',
+                  fontWeight: '700',
+                  fontFamily: 'JetBrains Mono, monospace',
+                  textAlign: 'center',
+                  letterSpacing: '14px',
+                  outline: 'none',
+                  transition: 'border-color 0.2s ease',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
+                Code expires in 24 hours
+              </p>
+            </div>
 
-            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: 1.6 }}>
-              We have sent a verification link to
-            </p>
+            {/* Verify button */}
+            <button
+              onClick={handleVerifyToken}
+              disabled={verificationToken.length !== 6 || verifying}
+              className="btn-primary"
+              style={{
+                width: '100%', padding: '14px',
+                fontSize: '15px', marginBottom: '16px',
+                justifyContent: 'center',
+                opacity: verificationToken.length !== 6 ? 0.5 : 1,
+                cursor: verificationToken.length !== 6 ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {verifying ? 'Verifying...' : 'Verify Account'}
+            </button>
 
-            <p style={{ fontSize: '15px', fontWeight: '600', color: 'var(--accent)', marginBottom: '24px' }}>
-              {registeredEmail}
-            </p>
+            {/* Resend */}
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                Didn't receive the code?
+              </p>
+              <button
+                onClick={handleResendSMS}
+                disabled={resendCooldown > 0 || resending}
+                style={{
+                  background: 'none', border: 'none',
+                  color: resendCooldown > 0
+                    ? 'var(--text-muted)'
+                    : 'var(--accent)',
+                  fontSize: '13px', fontWeight: '600',
+                  cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
+                  padding: '4px'
+                }}
+              >
+                {resending
+                  ? 'Sending...'
+                  : resendCooldown > 0
+                    ? 'Resend in ' + resendCooldown + 's'
+                    : 'Resend SMS'
+                }
+              </button>
+            </div>
 
+            {/* Wrong number — go back */}
             <div style={{
-              padding: '14px 16px',
+              padding: '12px 16px',
               background: 'var(--bg-elevated)',
               borderRadius: '8px',
-              marginBottom: '20px',
-              textAlign: 'left'
+              textAlign: 'center'
             }}>
-              <p style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: '600', marginBottom: '10px' }}>
-                What happens next
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Wrong phone number?{' '}
+                <button
+                  onClick={function() {
+                    setVerificationToken('')
+                    setStep(1)
+                  }}
+                  style={{
+                    background: 'none', border: 'none',
+                    color: 'var(--accent)', fontSize: '12px',
+                    fontWeight: '600', cursor: 'pointer', padding: '0'
+                  }}
+                >
+                  Go back and correct it
+                </button>
               </p>
-              {[
-                'Click the verification link in your email',
-                'Your account will be activated automatically',
-                'Your API key will be sent to the same email',
-                'Use the API key to configure your IDS agent'
-              ].map(function(item, i) {
-                return (
-                  <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
-                    <div style={{
-                      width: '20px', height: '20px',
-                      background: 'var(--accent)',
-                      borderRadius: '50%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '10px', color: 'white', fontWeight: '700',
-                      flexShrink: 0
-                    }}>
-                      {i + 1}
-                    </div>
-                    <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{item}</p>
-                  </div>
-                )
-              })}
             </div>
-
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Did not receive the email? Check your spam folder or{' '}
-              <button
-                onClick={function() { setStep(1) }}
-                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '12px' }}
-              >
-                go back and try again
-              </button>
-            </p>
-
-            <button
-              onClick={function() { navigate('/login') }}
-              className="btn-primary"
-              style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
-            >
-              Go to Login
-            </button>
           </div>
         )}
       </div>

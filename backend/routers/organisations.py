@@ -6,9 +6,11 @@ from services.audit import log_action
 from services.notifications import NotificationService
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime, timedelta
 import uuid
 import secrets
 import hashlib
+import random
 import bcrypt
 
 router = APIRouter(prefix="/api/organisations", tags=["Organisations"])
@@ -36,24 +38,23 @@ class UpdateOrganisationRequest(BaseModel):
     city: Optional[str] = None
     domain: Optional[str] = None
 
+class VerifyTokenRequest(BaseModel):
+    token: str
+    email: str
+
+class ResendSMSRequest(BaseModel):
+    email: str
+
 # ─────────────────────────────────────────
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────
 
 def generate_org_code(name: str) -> str:
-    """
-    Generates a unique human readable org code
-    e.g. GCB Bank -> GCB-AF3C
-    """
     prefix = name[:3].upper().replace(" ", "")
     suffix = secrets.token_hex(2).upper()
     return f"{prefix}-{suffix}"
 
 def generate_api_key() -> tuple:
-    """
-    Generates a raw API key and its hash
-    Returns (raw_key, hashed_key)
-    """
     raw_key = f"ids_sk_{secrets.token_urlsafe(32)}"
     hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
     return raw_key, hashed_key
@@ -62,6 +63,10 @@ def hash_password(password: str) -> str:
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed.decode('utf-8')
+
+def generate_sms_token() -> str:
+    """Generates a 6-digit numeric verification code"""
+    return str(random.randint(100000, 999999))
 
 # ─────────────────────────────────────────
 # ENDPOINTS
@@ -129,6 +134,7 @@ async def register_organisation(
         'admin_id': admin_id,
         'full_name': payload.admin_name,
         'email': payload.admin_email.lower(),
+        'phone': payload.phone,
         'password_hash': hash_password(payload.password),
         'role': 'org_admin',
         'org_id': org_id,
@@ -146,26 +152,44 @@ async def register_organisation(
     db.collection('organisations').document(org_id).set(organisation)
     db.collection('admins').document(admin_id).set(admin_account)
 
-    # Generate verification token
-    verification_token = secrets.token_urlsafe(32)
+    # ─────────────────────────────────────
+    # Generate 6-digit SMS verification token
+    # ─────────────────────────────────────
+    verification_token = generate_sms_token()
+
     db.collection('verification_tokens').document(
         verification_token
     ).set({
         'org_id': org_id,
         'admin_id': admin_id,
         'email': payload.admin_email.lower(),
+        'phone': payload.phone,
         'raw_api_key': raw_api_key,
-        'created_at': firestore.SERVER_TIMESTAMP
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'expires_at': (
+            datetime.utcnow() + timedelta(hours=24)
+        ).isoformat()
     })
 
-    # Send verification email
-    from services.email import send_verification_email
-    send_verification_email(
-        email=payload.admin_email,
-        org_name=payload.name,
-        org_code=org_code,
-        verification_token=verification_token
-    )
+    # ─────────────────────────────────────
+    # Send verification code via SMS
+    # ─────────────────────────────────────
+    try:
+        from services.sms import send_verification_sms
+        sms_result = send_verification_sms(
+            phone_number=payload.phone,
+            org_name=payload.name,
+            token=verification_token
+        )
+        if sms_result['status'] == 'success':
+            print(f"Verification SMS sent to {payload.phone}")
+        else:
+            print(f"SMS failed: {sms_result.get('message')}")
+    except Exception as sms_error:
+        print(f"SMS error (non-fatal): {sms_error}")
+
+    # Always log token for debugging during development
+    print(f"[DEV] Verification token for {payload.admin_email}: {verification_token}")
 
     log_action(
         admin_id='system',
@@ -190,73 +214,257 @@ async def register_organisation(
 
     return {
         "status": "success",
-        "message": "Registration successful. Check your email to verify your account.",
+        "message": "Registration successful. A 6-digit verification code has been sent to your phone.",
         "data": {
             "org_id": org_id,
             "org_code": org_code,
-            "admin_email": payload.admin_email
+            "admin_email": payload.admin_email,
+            "phone": payload.phone
         }
     }
 
 
-@router.post("/verify-email/{token}")
-async def verify_email(token: str, request: Request):
-    token_doc = db.collection('verification_tokens').document(token).get()
+# ─────────────────────────────────────────
+# SMS VERIFICATION — NEW PRIMARY ENDPOINT
+# ─────────────────────────────────────────
 
-    if not token_doc.exists:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid verification token"
+@router.post("/verify-sms")
+async def verify_sms(
+    payload: VerifyTokenRequest,
+    request: Request
+):
+    """
+    Verifies organisation registration via 6-digit SMS token
+    Admin enters the code received by SMS on the registration page
+    """
+    try:
+        token = payload.token.strip()
+
+        # Look up the token document
+        token_doc = db.collection('verification_tokens')\
+                      .document(token).get()
+
+        if not token_doc.exists:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid verification code. Please check and try again."
+            )
+
+        token_data = token_doc.to_dict()
+
+        # Verify email matches this token
+        if token_data.get('email') != payload.email.lower().strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Email does not match this verification code."
+            )
+
+        # Check expiry
+        expires_at = token_data.get('expires_at')
+        if expires_at:
+            try:
+                expiry = datetime.fromisoformat(expires_at)
+                if datetime.utcnow() > expiry:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Verification code has expired. Please register again."
+                    )
+            except ValueError:
+                pass
+
+        org_id = token_data.get('org_id')
+        admin_id = token_data.get('admin_id')
+        raw_api_key = token_data.get('raw_api_key', '')
+        phone = token_data.get('phone', '')
+
+        # Get org details
+        org_doc = db.collection('organisations')\
+                    .document(org_id).get()
+        org_data = org_doc.to_dict() if org_doc.exists else {}
+
+        # Activate organisation
+        db.collection('organisations').document(org_id).update({
+            'status': 'active',
+            'verified_at': firestore.SERVER_TIMESTAMP
+        })
+
+        # Activate admin account
+        db.collection('admins').document(admin_id).update({
+            'is_active': True,
+            'email_verified': True,
+            'verified_at': firestore.SERVER_TIMESTAMP
+        })
+
+        # Delete used token — cannot be reused
+        db.collection('verification_tokens').document(token).delete()
+
+        # Send welcome SMS with API key
+        try:
+            from services.sms import send_sms
+            if phone:
+                send_sms(
+                    to_number=phone,
+                    message=(
+                        f"Welcome to IntelliSense IDS!\n"
+                        f"Institution: {org_data.get('name', '')}\n"
+                        f"Org Code: {org_data.get('org_code', '')}\n\n"
+                        f"Your Agent API Key:\n{raw_api_key}\n\n"
+                        f"Keep this key safe. You need it to install your IDS agent."
+                    )
+                )
+        except Exception as sms_error:
+            print(f"Welcome SMS error (non-fatal): {sms_error}")
+
+        log_action(
+            admin_id=admin_id,
+            admin_email=payload.email,
+            admin_role='org_admin',
+            action_type='ACCOUNT_VERIFIED',
+            action_detail=f"Organisation {org_id} verified via SMS",
+            ip_address=request.client.host,
+            target_org_id=org_id,
+            status='success'
         )
 
-    token_data = token_doc.to_dict()
+        return {
+            "status": "success",
+            "message": "Account verified successfully. You can now log in.",
+            "data": {
+                "org_id": org_id,
+                "org_code": org_data.get('org_code', '')
+            }
+        }
 
-    # Activate organisation
-    db.collection('organisations').document(
-        token_data['org_id']
-    ).update({'status': 'active'})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # Activate admin
-    db.collection('admins').document(
-        token_data['admin_id']
-    ).update({'is_active': True})
 
-    # Delete token
-    db.collection('verification_tokens').document(token).delete()
+# ─────────────────────────────────────────
+# RESEND SMS TOKEN
+# ─────────────────────────────────────────
 
-    # Send welcome email with API key
-    raw_api_key = token_data.get('raw_api_key', '')
-    org = db.collection('organisations').document(
-        token_data['org_id']
-    ).get().to_dict()
+@router.post("/resend-sms")
+async def resend_sms(
+    payload: ResendSMSRequest,
+    request: Request
+):
+    """
+    Generates a new 6-digit token and resends it via SMS
+    Called when admin clicks "Resend SMS" on the verify screen
+    """
+    try:
+        # Find admin by email
+        admins = db.collection('admins').where(
+            filter=firestore.FieldFilter(
+                'email', '==', payload.email.lower().strip()
+            )
+        ).get()
 
-    from services.email import send_welcome_email
-    send_welcome_email(
-        email=token_data['email'],
-        org_name=org.get('name', ''),
-        org_code=org.get('org_code', ''),
-        api_key=raw_api_key
-    )
+        if not admins:
+            raise HTTPException(
+                status_code=404,
+                detail="No account found with this email"
+            )
 
+        admin_doc = admins[0]
+        admin_data = admin_doc.to_dict()
+        org_id = admin_data.get('org_id')
+        phone = admin_data.get('phone', '')
+
+        if not phone:
+            raise HTTPException(
+                status_code=400,
+                detail="No phone number found for this account"
+            )
+
+        # Get org name
+        org_doc = db.collection('organisations')\
+                    .document(org_id).get()
+        org_data = org_doc.to_dict() if org_doc.exists else {}
+        org_name = org_data.get('name', 'your organisation')
+
+        # Delete any existing tokens for this admin
+        existing_tokens = db.collection('verification_tokens').where(
+            filter=firestore.FieldFilter(
+                'email', '==', payload.email.lower().strip()
+            )
+        ).get()
+
+        for doc in existing_tokens:
+            doc.reference.delete()
+
+        # Generate fresh 6-digit token
+        new_token = generate_sms_token()
+
+        # Save new token to Firestore
+        db.collection('verification_tokens').document(new_token).set({
+            'org_id': org_id,
+            'admin_id': admin_doc.id,
+            'email': payload.email.lower().strip(),
+            'phone': phone,
+            'raw_api_key': admin_data.get('raw_api_key', ''),
+            'created_at': firestore.SERVER_TIMESTAMP,
+            'expires_at': (
+                datetime.utcnow() + timedelta(hours=24)
+            ).isoformat()
+        })
+
+        # Send new SMS
+        try:
+            from services.sms import send_verification_sms
+            send_verification_sms(
+                phone_number=phone,
+                org_name=org_name,
+                token=new_token
+            )
+        except Exception as sms_error:
+            print(f"Resend SMS error: {sms_error}")
+
+        # Log for debugging
+        print(f"[DEV] Resent token for {payload.email}: {new_token}")
+
+        return {
+            "status": "success",
+            "message": f"New verification code sent to {phone}"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────
+# LEGACY EMAIL VERIFY — KEPT FOR BACKWARD COMPATIBILITY
+# Redirects to login if someone hits an old link
+# ─────────────────────────────────────────
+
+@router.post("/verify-email/{token}")
+async def verify_email_legacy(token: str, request: Request):
+    """
+    Legacy endpoint — old email verification links
+    SMS verification is now the primary method
+    """
     return {
-        "status": "success",
-        "message": "Email verified. Check your email for your API key."
+        "status": "info",
+        "message": "Email verification has been replaced with SMS verification. Please use the code sent to your phone."
     }
+
+
+# ─────────────────────────────────────────
+# ALL REMAINING STANDARD ENDPOINTS
+# ─────────────────────────────────────────
 
 @router.get("")
 async def get_all_organisations(
     current_admin: dict = Depends(require_permission('view_all_orgs'))
 ):
-    """
-    Returns all organisations
-    Super Admin and Platform Admin only
-    """
     orgs = db.collection('organisations').get()
-
     result = []
     for org in orgs:
         data = org.to_dict()
-        # Remove sensitive fields
         data.pop('api_key_hash', None)
         result.append(data)
 
@@ -272,11 +480,6 @@ async def get_organisation(
     org_id: str,
     current_admin: dict = Depends(get_current_admin)
 ):
-    """
-    Returns a single organisation
-    Org Admin can only view their own
-    """
-    # Org admin can only view their own org
     if current_admin['role'] == 'org_admin':
         if current_admin['org_id'] != org_id:
             raise HTTPException(
@@ -295,10 +498,7 @@ async def get_organisation(
     data = org_doc.to_dict()
     data.pop('api_key_hash', None)
 
-    return {
-        "status": "success",
-        "data": data
-    }
+    return {"status": "success", "data": data}
 
 
 @router.put("/{org_id}")
@@ -308,10 +508,6 @@ async def update_organisation(
     request: Request,
     current_admin: dict = Depends(get_current_admin)
 ):
-    """
-    Updates organisation details
-    """
-    # Org admin can only update their own org
     if current_admin['role'] == 'org_admin':
         if current_admin['org_id'] != org_id:
             raise HTTPException(
@@ -327,8 +523,10 @@ async def update_organisation(
             detail="Organisation not found"
         )
 
-    # Only update provided fields
-    update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    update_data = {
+        k: v for k, v in payload.dict().items()
+        if v is not None
+    }
 
     db.collection('organisations').document(org_id).update(update_data)
 
@@ -365,8 +563,6 @@ async def suspend_organisation(
 
     org_data = org_doc.to_dict()
 
-    # Save current status before suspending
-    # so we can restore it when reinstating
     db.collection('organisations').document(org_id).update({
         'status': 'suspended',
         'status_before_suspension': org_data.get('status', 'active')
@@ -405,8 +601,6 @@ async def reinstate_organisation(
 
     org_data = org_doc.to_dict()
 
-    # Restore the status that existed before suspension
-    # not just blindly setting to active
     previous_status = org_data.get(
         'status_before_suspension',
         'pending_verification'
@@ -433,16 +627,13 @@ async def reinstate_organisation(
         "message": f"Organisation reinstated to {previous_status}"
     }
 
+
 @router.delete("/{org_id}")
 async def delete_organisation(
     org_id: str,
     request: Request,
     current_admin: dict = Depends(require_permission('delete_org'))
 ):
-    """
-    Deletes an organisation
-    Super Admin only
-    """
     org_doc = db.collection('organisations').document(org_id).get()
 
     if not org_doc.exists:
@@ -453,10 +644,8 @@ async def delete_organisation(
 
     org_data = org_doc.to_dict()
 
-    # Delete organisation
     db.collection('organisations').document(org_id).delete()
 
-    # Delete associated admin account
     admins = db.collection('admins').where(
         filter=firestore.FieldFilter('org_id', '==', org_id)
     ).get()
@@ -488,12 +677,6 @@ async def regenerate_api_key(
     request: Request,
     current_admin: dict = Depends(get_current_admin)
 ):
-    """
-    Regenerates the API key for an organisation
-    Org Admin can regenerate their own key
-    Super Admin can regenerate any key
-    """
-    # Org admin can only regenerate their own key
     if current_admin['role'] == 'org_admin':
         if current_admin['org_id'] != org_id:
             raise HTTPException(
@@ -509,7 +692,6 @@ async def regenerate_api_key(
             detail="Organisation not found"
         )
 
-    # Generate new API key
     raw_api_key, hashed_api_key = generate_api_key()
 
     db.collection('organisations').document(org_id).update({
@@ -531,7 +713,5 @@ async def regenerate_api_key(
     return {
         "status": "success",
         "message": "API key regenerated successfully. Update your agent with the new key.",
-        "data": {
-            "api_key": raw_api_key
-        }
+        "data": {"api_key": raw_api_key}
     }
