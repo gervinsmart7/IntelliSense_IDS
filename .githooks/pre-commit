@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Block obvious sensitive files and secret-like values in staged changes.
+# Do not scan the hook implementation itself.
+
+staged_files=$(git diff --cached --name-only)
+if printf '%s\n' "$staged_files" | grep -E '(^|/)(\.env|\.env\..*|\.pem|\.p12|\.key|\.json)$' >/dev/null 2>&1; then
+  echo "Refusing to commit sensitive file(s). Use .env.example or remove the file from staging first." >&2
+  exit 1
+fi
+
+# Exclude hook support files from content scanning.
+scan_files=$(printf '%s\n' "$staged_files" | grep -v '^\.githooks/' || true)
+if [ -n "$scan_files" ]; then
+  secret_pattern='AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|AIza[0-9A-Za-z_-]{35}|sk_live_[A-Za-z0-9]{16,}|TWILIO_ACCOUNT_SID|TWILIO_AUTH_TOKEN'
+  if printf '%s\n' "$scan_files" | xargs -r grep -I -nE "$secret_pattern" --; then
+    echo "Possible secret detected in staged changes. Please remove it before committing." >&2
+    exit 1
+  fi
+fi
