@@ -20,16 +20,15 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=["http://localhost:5173",
-#"https://washhouse-repeater-tavern.ngrok-free.dev",
- #"https://intellisense-ids.web.app",
- #"https://intellisense-ids.firebase.com"
-
-#],
-allow_origins=["*"],   
- allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_origins=[""
+        "http://localhost:5173",
+        "https://intellisense-ids.web.app",
+        "https://intellisense-ids.firebase.com"
+],
+   
+   allow_credentials=True,
+   allow_methods=["*"],
+   allow_headers=["*"]
 )
 
 app.include_router(auth.router)
