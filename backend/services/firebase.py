@@ -1,4 +1,3 @@
-cat > ~/IntelliSense_IDS/backend/services/firebase.py << 'EOF'
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
@@ -49,4 +48,3 @@ def get_db():
     if _db is None:
         init_firebase()
     return _db
-EOF
