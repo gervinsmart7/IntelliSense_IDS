@@ -1,57 +1,73 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
+# Python virtual environments — NEVER commit these
 venv/
 env/
 ENV/
-*.egg-info/
-.pytest_cache/
+.venv/
+*/venv/
+backend/venv/
+agent/venv/
+datasets/venv/
 
-# Node / React
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Node
 node_modules/
 dist/
 build/
 .vite/
 
-# Environment variables
+# Environment variables — NEVER commit
 .env
 .env.local
 .env.*.local
+*.envy
 
-# Firebase credentials 
+# Firebase credentials — NEVER commit
+*firebase-adminsdk*.json
 firebase-key.json
-*-firebase-adminsdk-*.json
 
-# AWS credentials 
+# Large datasets — keep locally only
+datasets/
+*.csv
+backend/ml/datasets/
+backend/ml/sample_dataset.csv
+backend/ml/finance_dataset.csv
+
+# Trained ML models — too large for git
+*.pkl
+backend/ml/trained_models/
+
+# AWS credentials
 .aws/
 credentials
 
 # Logs
 *.log
 logs/
+ngrok.log
 
 # OS files
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Misc
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Firebase hosting
 .firebase/
 firebase-debug.log
-ngrok.log
 
-# Large datasets
-datasets/
-*.csv
-backend/ml/sample_dataset.csv
-backend/ml/finance_dataset.csv
-backend/ml/datasets/
-
-
-#Trained Models
-*.pkl
-backend/ml/trained_models/*.pkl
-
-docs/
+# PyInstaller
+agent/build/
+agent/dist/
+*.spec
+*.envy
