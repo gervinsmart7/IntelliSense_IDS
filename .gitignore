@@ -41,3 +41,17 @@ desktop.ini
 .firebase/
 firebase-debug.log
 ngrok.log
+
+# Large datasets
+datasets/
+*.csv
+backend/ml/sample_dataset.csv
+backend/ml/finance_dataset.csv
+backend/ml/datasets/
+
+
+#Trained Models
+*.pkl
+backend/ml/trained_models/*.pkl
+
+docs/
