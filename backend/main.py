@@ -17,18 +17,22 @@ app = FastAPI(
     description="AI/ML Based Intrusion Detection System REST API",
     version="1.0.0"
 )
+import os
+
+# Configure allowed CORS origins via environment variable for deployment flexibility.
+# Set ALLOW_ORIGINS to a comma-separated list of origins, or '*' to allow all origins (for testing only).
+raw_origins = os.getenv('ALLOW_ORIGINS', 'http://localhost:5173,https://intellisense-ids.web.app,https://intellisense-ids.firebase.com')
+if raw_origins.strip() == '*':
+    allowed_origins = ['*']
+else:
+    allowed_origins = [o.strip() for o in raw_origins.split(',') if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[""
-        "http://localhost:5173",
-        "https://intellisense-ids.web.app",
-        "https://intellisense-ids.firebase.com"
-],
-   
-   allow_credentials=True,
-   allow_methods=["*"],
-   allow_headers=["*"]
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
 )
 
 app.include_router(auth.router)

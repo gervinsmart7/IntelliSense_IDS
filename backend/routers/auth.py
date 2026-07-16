@@ -17,7 +17,10 @@ import secrets
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
-db = get_db()
+
+
+def get_firestore_db():
+    return get_db()
 
 # ─────────────────────────────────────────
 # REQUEST MODELS
@@ -44,6 +47,11 @@ class ChangePasswordRequest(BaseModel):
 
 @router.post("/forgot-password")
 async def forgot_password(payload: ForgotPasswordRequest, request: Request):
+    try:
+        db = get_firestore_db()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Authentication service is temporarily unavailable") from exc
+
     email = payload.email.lower().strip()
 
     admins = db.collection('admins').where(
@@ -70,6 +78,11 @@ async def forgot_password(payload: ForgotPasswordRequest, request: Request):
 
 @router.post("/reset-password")
 async def reset_password(payload: ResetPasswordRequest):
+    try:
+        db = get_firestore_db()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Authentication service is temporarily unavailable") from exc
+
     token_doc = db.collection('password_reset_tokens').document(payload.token).get()
 
     if not token_doc.exists:
@@ -99,9 +112,14 @@ async def reset_password(payload: ResetPasswordRequest):
 
 @router.post("/login")
 async def login(payload: LoginRequest, request: Request):
+    try:
+        db = get_firestore_db()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Authentication service is temporarily unavailable") from exc
+
     email = payload.email.lower().strip()
     password = payload.password
-    ip_address = request.client.host
+    ip_address = request.client.host if request.client else 'unknown'
 
     # Find admin by email
     admins = db.collection('admins').where(
@@ -287,6 +305,11 @@ async def change_password(
     current_admin: dict = Depends(get_current_admin)
 ):
     import bcrypt
+
+    try:
+        db = get_firestore_db()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Authentication service is temporarily unavailable") from exc
 
     # Get fresh admin data from Firestore
     admin_doc = db.collection('admins')\

@@ -52,7 +52,6 @@ credentials
 # Logs
 *.log
 logs/
-ngrok.log
 
 # OS files
 .DS_Store

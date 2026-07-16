@@ -11,7 +11,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-db = get_db()
+
+def get_firestore_db():
+    return get_db()
 
 # JWT Settings
 JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key')
@@ -67,6 +69,7 @@ def verify_api_key(api_key: str):
 
     incoming_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
+    db = get_firestore_db()
     orgs = db.collection('organisations').where(
         filter=firestore.FieldFilter('api_key_hash', '==', incoming_hash)
     ).get()
@@ -117,6 +120,7 @@ async def get_current_admin(
         )
 
     # Verify admin still exists and is active
+    db = get_firestore_db()
     admin_doc = db.collection('admins')\
                   .document(payload['admin_id']).get()
 

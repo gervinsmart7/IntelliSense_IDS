@@ -1,7 +1,6 @@
 import axios from 'axios'
 
-const API_URL = 'https://intellisense-ids.onrender.com/'
-
+const API_URL = import.meta.env.VITE_API_URL || 'https://intellisense-ids.onrender.com/'
 
 const api = axios.create({
   baseURL: API_URL,
