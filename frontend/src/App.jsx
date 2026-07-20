@@ -91,7 +91,7 @@ function App() {
         }}
       />
       <Routes>
-        
+        <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={isAuthenticated ? <RootRedirect /> : <Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
