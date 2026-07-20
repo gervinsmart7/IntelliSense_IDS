@@ -10,17 +10,11 @@ const STEPS = ['Organisation Details', 'Account Details', 'Verify Email']
 const ORG_TYPES = [
   'Commercial Bank',
   'Investment Bank',
-  'Microfinance Institution',
-  'Insurance Company',
-  'Pension Fund',
-  'Savings and Loans',
+  'Microfinance',
   'Fintech Company',
   'Payment Service Provider',
   'Central Bank',
-  'Credit Union',
-  'Forex Bureau',
-  'Securities Firm',
-  'Mobile Money Operator'
+  'Credit Union'
 ]
 
 const COUNTRIES = [
