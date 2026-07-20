@@ -42,7 +42,7 @@ class VerifyTokenRequest(BaseModel):
     token: str
     email: str
 
-class ResendSMSRequest(BaseModel):
+class ResendEmailRequest(BaseModel):
     email: str
 
 # ─────────────────────────────────────────
@@ -64,12 +64,12 @@ def hash_password(password: str) -> str:
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed.decode('utf-8')
 
-def generate_sms_token() -> str:
+def generate_verification_token() -> str:
     """Generates a 6-digit numeric verification code"""
     return str(random.randint(100000, 999999))
 
 # ─────────────────────────────────────────
-# ENDPOINTS
+# REGISTER
 # ─────────────────────────────────────────
 
 @router.post("/register")
@@ -153,9 +153,9 @@ async def register_organisation(
     db.collection('admins').document(admin_id).set(admin_account)
 
     # ─────────────────────────────────────
-    # Generate 6-digit SMS verification token
+    # Generate 6-digit verification token
     # ─────────────────────────────────────
-    verification_token = generate_sms_token()
+    verification_token = generate_verification_token()
 
     db.collection('verification_tokens').document(
         verification_token
@@ -172,31 +172,37 @@ async def register_organisation(
     })
 
     # ─────────────────────────────────────
-    # Send verification code via SMS
+    # Send 6-digit code via SendGrid email
     # ─────────────────────────────────────
     try:
-        from services.sms import send_verification_sms
-        sms_result = send_verification_sms(
-            phone_number=payload.phone,
+        from services.email import send_verification_email
+        result = send_verification_email(
+            to_email=payload.admin_email,
             org_name=payload.name,
             token=verification_token
         )
-        if sms_result['status'] == 'success':
-            print(f"Verification SMS sent to {payload.phone}")
+        if result['status'] == 'success':
+            print(f"Verification email sent to {payload.admin_email}")
         else:
-            print(f"SMS failed: {sms_result.get('message')}")
-    except Exception as sms_error:
-        print(f"SMS error (non-fatal): {sms_error}")
+            print(f"Email failed: {result.get('message')}")
+    except Exception as email_error:
+        print(f"Email error (non-fatal): {email_error}")
 
-    # Always log token for debugging during development
-    print(f"[DEV] Verification token for {payload.admin_email}: {verification_token}")
+    # Always log token for local debugging
+    print(
+        f"[DEV] Verification token for "
+        f"{payload.admin_email}: {verification_token}"
+    )
 
     log_action(
         admin_id='system',
         admin_email='system',
         admin_role='system',
         action_type='ORGANISATION_REGISTERED',
-        action_detail='New organisation: ' + payload.name + ' (' + org_code + ')',
+        action_detail=(
+            'New organisation: ' +
+            payload.name + ' (' + org_code + ')'
+        ),
         ip_address=request.client.host,
         target_org_id=org_id,
         target_org_code=org_code,
@@ -214,28 +220,31 @@ async def register_organisation(
 
     return {
         "status": "success",
-        "message": "Registration successful. A 6-digit verification code has been sent to your phone.",
+        "message": (
+            "Registration successful. "
+            "A 6-digit verification code has been "
+            "sent to your email address."
+        ),
         "data": {
             "org_id": org_id,
             "org_code": org_code,
-            "admin_email": payload.admin_email,
-            "phone": payload.phone
+            "admin_email": payload.admin_email
         }
     }
 
 
 # ─────────────────────────────────────────
-# SMS VERIFICATION — NEW PRIMARY ENDPOINT
+# VERIFY EMAIL TOKEN
 # ─────────────────────────────────────────
 
 @router.post("/verify-sms")
-async def verify_sms(
+async def verify_token(
     payload: VerifyTokenRequest,
     request: Request
 ):
     """
-    Verifies organisation registration via 6-digit SMS token
-    Admin enters the code received by SMS on the registration page
+    Verifies organisation registration via 6-digit code
+    sent to the admin's email address via SendGrid
     """
     try:
         token = payload.token.strip()
@@ -267,7 +276,10 @@ async def verify_sms(
                 if datetime.utcnow() > expiry:
                     raise HTTPException(
                         status_code=400,
-                        detail="Verification code has expired. Please register again."
+                        detail=(
+                            "Verification code has expired. "
+                            "Please request a new one."
+                        )
                     )
             except ValueError:
                 pass
@@ -275,7 +287,6 @@ async def verify_sms(
         org_id = token_data.get('org_id')
         admin_id = token_data.get('admin_id')
         raw_api_key = token_data.get('raw_api_key', '')
-        phone = token_data.get('phone', '')
 
         # Get org details
         org_doc = db.collection('organisations')\
@@ -298,29 +309,31 @@ async def verify_sms(
         # Delete used token — cannot be reused
         db.collection('verification_tokens').document(token).delete()
 
-        # Send welcome SMS with API key
+        # ─────────────────────────────────
+        # Send welcome email with API key
+        # via SendGrid
+        # ─────────────────────────────────
         try:
-            from services.sms import send_sms
-            if phone:
-                send_sms(
-                    to_number=phone,
-                    message=(
-                        f"Welcome to IntelliSense IDS!\n"
-                        f"Institution: {org_data.get('name', '')}\n"
-                        f"Org Code: {org_data.get('org_code', '')}\n\n"
-                        f"Your Agent API Key:\n{raw_api_key}\n\n"
-                        f"Keep this key safe. You need it to install your IDS agent."
-                    )
-                )
-        except Exception as sms_error:
-            print(f"Welcome SMS error (non-fatal): {sms_error}")
+            from services.email import send_welcome_email
+            send_welcome_email(
+                to_email=token_data.get('email', ''),
+                org_name=org_data.get('name', ''),
+                org_code=org_data.get('org_code', ''),
+                api_key=raw_api_key
+            )
+            print(
+                f"Welcome email sent to "
+                f"{token_data.get('email')}"
+            )
+        except Exception as email_error:
+            print(f"Welcome email error (non-fatal): {email_error}")
 
         log_action(
             admin_id=admin_id,
             admin_email=payload.email,
             admin_role='org_admin',
             action_type='ACCOUNT_VERIFIED',
-            action_detail=f"Organisation {org_id} verified via SMS",
+            action_detail=f"Organisation {org_id} verified via email code",
             ip_address=request.client.host,
             target_org_id=org_id,
             status='success'
@@ -328,7 +341,11 @@ async def verify_sms(
 
         return {
             "status": "success",
-            "message": "Account verified successfully. You can now log in.",
+            "message": (
+                "Account verified successfully. "
+                "Your API key has been sent to your email. "
+                "You can now log in."
+            ),
             "data": {
                 "org_id": org_id,
                 "org_code": org_data.get('org_code', '')
@@ -342,17 +359,17 @@ async def verify_sms(
 
 
 # ─────────────────────────────────────────
-# RESEND SMS TOKEN
+# RESEND VERIFICATION CODE
 # ─────────────────────────────────────────
 
 @router.post("/resend-sms")
-async def resend_sms(
-    payload: ResendSMSRequest,
+async def resend_verification(
+    payload: ResendEmailRequest,
     request: Request
 ):
     """
-    Generates a new 6-digit token and resends it via SMS
-    Called when admin clicks "Resend SMS" on the verify screen
+    Generates a new 6-digit token and resends
+    it via SendGrid email
     """
     try:
         # Find admin by email
@@ -371,13 +388,6 @@ async def resend_sms(
         admin_doc = admins[0]
         admin_data = admin_doc.to_dict()
         org_id = admin_data.get('org_id')
-        phone = admin_data.get('phone', '')
-
-        if not phone:
-            raise HTTPException(
-                status_code=400,
-                detail="No phone number found for this account"
-            )
 
         # Get org name
         org_doc = db.collection('organisations')\
@@ -385,7 +395,7 @@ async def resend_sms(
         org_data = org_doc.to_dict() if org_doc.exists else {}
         org_name = org_data.get('name', 'your organisation')
 
-        # Delete any existing tokens for this admin
+        # Delete any existing tokens for this email
         existing_tokens = db.collection('verification_tokens').where(
             filter=firestore.FieldFilter(
                 'email', '==', payload.email.lower().strip()
@@ -396,38 +406,50 @@ async def resend_sms(
             doc.reference.delete()
 
         # Generate fresh 6-digit token
-        new_token = generate_sms_token()
+        new_token = generate_verification_token()
 
         # Save new token to Firestore
         db.collection('verification_tokens').document(new_token).set({
             'org_id': org_id,
             'admin_id': admin_doc.id,
             'email': payload.email.lower().strip(),
-            'phone': phone,
-            'raw_api_key': admin_data.get('raw_api_key', ''),
+            'phone': admin_data.get('phone', ''),
+            'raw_api_key': admin_data.get('raw_api_key_temp', ''),
             'created_at': firestore.SERVER_TIMESTAMP,
             'expires_at': (
                 datetime.utcnow() + timedelta(hours=24)
             ).isoformat()
         })
 
-        # Send new SMS
+        # ─────────────────────────────────
+        # Send new code via SendGrid email
+        # ─────────────────────────────────
         try:
-            from services.sms import send_verification_sms
-            send_verification_sms(
-                phone_number=phone,
+            from services.email import send_verification_email
+            send_verification_email(
+                to_email=payload.email.lower().strip(),
                 org_name=org_name,
                 token=new_token
             )
-        except Exception as sms_error:
-            print(f"Resend SMS error: {sms_error}")
+            print(
+                f"Resent verification code to "
+                f"{payload.email}"
+            )
+        except Exception as email_error:
+            print(f"Resend email error: {email_error}")
 
-        # Log for debugging
-        print(f"[DEV] Resent token for {payload.email}: {new_token}")
+        # Log token for debugging
+        print(
+            f"[DEV] Resent token for "
+            f"{payload.email}: {new_token}"
+        )
 
         return {
             "status": "success",
-            "message": f"New verification code sent to {phone}"
+            "message": (
+                f"New verification code sent to "
+                f"{payload.email}"
+            )
         }
 
     except HTTPException:
@@ -437,24 +459,22 @@ async def resend_sms(
 
 
 # ─────────────────────────────────────────
-# LEGACY EMAIL VERIFY — KEPT FOR BACKWARD COMPATIBILITY
-# Redirects to login if someone hits an old link
+# LEGACY ENDPOINT — kept for old links
 # ─────────────────────────────────────────
 
 @router.post("/verify-email/{token}")
 async def verify_email_legacy(token: str, request: Request):
-    """
-    Legacy endpoint — old email verification links
-    SMS verification is now the primary method
-    """
     return {
         "status": "info",
-        "message": "Email verification has been replaced with SMS verification. Please use the code sent to your phone."
+        "message": (
+            "Please use the 6-digit code "
+            "sent to your email address."
+        )
     }
 
 
 # ─────────────────────────────────────────
-# ALL REMAINING STANDARD ENDPOINTS
+# STANDARD ENDPOINTS
 # ─────────────────────────────────────────
 
 @router.get("")
@@ -616,7 +636,10 @@ async def reinstate_organisation(
         admin_email=current_admin['email'],
         admin_role=current_admin['role'],
         action_type='ORGANISATION_REINSTATED',
-        action_detail=f"Organisation {org_id} reinstated to {previous_status}",
+        action_detail=(
+            f"Organisation {org_id} "
+            f"reinstated to {previous_status}"
+        ),
         ip_address=request.client.host,
         target_org_id=org_id,
         status='success'
@@ -658,7 +681,10 @@ async def delete_organisation(
         admin_email=current_admin['email'],
         admin_role=current_admin['role'],
         action_type='ORGANISATION_DELETED',
-        action_detail=f"Organisation {org_data['name']} ({org_data['org_code']}) deleted",
+        action_detail=(
+            f"Organisation {org_data['name']} "
+            f"({org_data['org_code']}) deleted"
+        ),
         ip_address=request.client.host,
         target_org_id=org_id,
         target_org_code=org_data['org_code'],
@@ -712,6 +738,9 @@ async def regenerate_api_key(
 
     return {
         "status": "success",
-        "message": "API key regenerated successfully. Update your agent with the new key.",
+        "message": (
+            "API key regenerated successfully. "
+            "Update your agent with the new key."
+        ),
         "data": {"api_key": raw_api_key}
     }

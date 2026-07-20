@@ -1,21 +1,26 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Shield, CheckCircle, Eye, EyeOff, MessageSquare } from 'lucide-react'
+import { Shield, CheckCircle, Eye, EyeOff, Mail } from 'lucide-react'
 import { orgAPI } from '../../services/api'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 
-const STEPS = ['Organisation Details', 'Account Details', 'Verify Phone']
+const STEPS = ['Organisation Details', 'Account Details', 'Verify Email']
 
 const ORG_TYPES = [
   'Commercial Bank',
   'Investment Bank',
-  'Microfinance',
+  'Microfinance Institution',
   'Insurance Company',
+  'Pension Fund',
   'Savings and Loans',
   'Fintech Company',
+  'Payment Service Provider',
   'Central Bank',
-  'Credit Union'
+  'Credit Union',
+  'Forex Bureau',
+  'Securities Firm',
+  'Mobile Money Operator'
 ]
 
 const COUNTRIES = [
@@ -30,7 +35,7 @@ function Register() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
-  // SMS verification state
+  // Email verification state
   const [verificationToken, setVerificationToken] = useState('')
   const [verifying, setVerifying] = useState(false)
   const [resending, setResending] = useState(false)
@@ -65,11 +70,20 @@ function Register() {
   function validateStep2() {
     if (!form.admin_name) { toast.error('Admin name is required'); return false }
     if (!form.admin_email) { toast.error('Email is required'); return false }
+    if (!/\S+@\S+\.\S+/.test(form.admin_email)) {
+      toast.error('Please enter a valid email address')
+      return false
+    }
     if (!form.phone) { toast.error('Phone number is required'); return false }
-    if (!form.phone.startsWith('+')) { toast.error('Phone must include country code e.g. +233...'); return false }
     if (!form.password) { toast.error('Password is required'); return false }
-    if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return false }
-    if (form.password !== form.confirm_password) { toast.error('Passwords do not match'); return false }
+    if (form.password.length < 8) {
+      toast.error('Password must be at least 8 characters')
+      return false
+    }
+    if (form.password !== form.confirm_password) {
+      toast.error('Passwords do not match')
+      return false
+    }
     return true
   }
 
@@ -88,7 +102,7 @@ function Register() {
         password: form.password
       })
       setStep(2)
-      toast.success('Registration successful — check your phone for the code')
+      toast.success('Registration successful — check your email for the code')
     } catch(e) {
       toast.error(e.response?.data?.detail || 'Registration failed')
     } finally {
@@ -105,7 +119,7 @@ function Register() {
         email: form.admin_email
       })
       if (res.data.status === 'success') {
-        toast.success('Account verified! You can now log in.')
+        toast.success('Account verified! Check your email for your API key.')
         navigate('/login')
       }
     } catch(e) {
@@ -117,14 +131,14 @@ function Register() {
     }
   }
 
-  async function handleResendSMS() {
+  async function handleResendCode() {
     if (resendCooldown > 0 || resending) return
     setResending(true)
     try {
       await api.post('/api/organisations/resend-sms', {
         email: form.admin_email
       })
-      toast.success('New code sent to ' + form.phone)
+      toast.success('New code sent to ' + form.admin_email)
       setResendCooldown(60)
       const timer = setInterval(function() {
         setResendCooldown(function(prev) {
@@ -192,7 +206,8 @@ function Register() {
                     ? 'var(--accent)'
                     : 'var(--bg-elevated)',
                   color: isComplete || isActive ? 'white' : 'var(--text-muted)',
-                  transition: 'all 0.2s ease', flexShrink: 0
+                  transition: 'all 0.2s ease',
+                  flexShrink: 0
                 }}>
                   {isComplete ? <CheckCircle size={14} /> : i + 1}
                 </div>
@@ -361,6 +376,9 @@ function Register() {
                   placeholder="you@organisation.com"
                   className="input"
                 />
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  A 6-digit verification code will be sent to this email
+                </p>
               </div>
 
               <div>
@@ -374,9 +392,6 @@ function Register() {
                   placeholder="+233 24 000 0000"
                   className="input"
                 />
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Include country code — a 6-digit verification code will be sent here
-                </p>
               </div>
 
               <div>
@@ -395,7 +410,13 @@ function Register() {
                   <button
                     type="button"
                     onClick={function() { setShowPassword(!showPassword) }}
-                    style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}
+                    style={{
+                      position: 'absolute', right: '12px',
+                      top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none',
+                      cursor: 'pointer', color: 'var(--text-muted)',
+                      display: 'flex'
+                    }}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -437,37 +458,56 @@ function Register() {
         )}
 
         {/* ─────────────────────────────────────────
-            STEP 2 — SMS Verification
+            STEP 2 — Email Verification
         ───────────────────────────────────────── */}
         {step === 2 && (
           <div>
-            {/* Icon */}
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            {/* Icon and heading */}
+            <div style={{ textAlign: 'center', marginBottom: '28px' }}>
               <div style={{
                 width: '72px', height: '72px',
                 background: 'rgba(99,102,241,0.1)',
                 border: '2px solid rgba(99,102,241,0.2)',
                 borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'center',
                 margin: '0 auto 16px'
               }}>
-                <MessageSquare size={32} color="var(--accent)" />
+                <Mail size={32} color="var(--accent)" />
               </div>
               <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: 'Syne, sans-serif', marginBottom: '8px' }}>
-                Verify Your Phone
+                Verify Your Email
               </h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                We sent a 6-digit code to
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '6px' }}>
+                We sent a 6-digit verification code to
               </p>
-              <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--accent)', marginTop: '4px', fontFamily: 'JetBrains Mono, monospace' }}>
-                {form.phone}
+              <p style={{ fontSize: '14px', fontWeight: '700', color: 'var(--accent)', fontFamily: 'JetBrains Mono, monospace' }}>
+                {form.admin_email}
+              </p>
+            </div>
+
+            {/* Info box */}
+            <div style={{
+              padding: '12px 16px',
+              background: 'rgba(99,102,241,0.06)',
+              border: '1px solid rgba(99,102,241,0.15)',
+              borderRadius: '8px',
+              marginBottom: '20px'
+            }}>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
+                Check your inbox and spam folder. The code arrives within 1 minute. It expires in 24 hours.
               </p>
             </div>
 
             {/* Token input */}
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '8px', textAlign: 'center' }}>
-                Enter Verification Code
+              <label style={{
+                display: 'block', fontSize: '11px',
+                fontWeight: '600', textTransform: 'uppercase',
+                letterSpacing: '0.05em', color: 'var(--text-muted)',
+                marginBottom: '8px', textAlign: 'center'
+              }}>
+                Enter 6-Digit Code
               </label>
               <input
                 type="text"
@@ -501,9 +541,6 @@ function Register() {
                   boxSizing: 'border-box'
                 }}
               />
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
-                Code expires in 24 hours
-              </p>
             </div>
 
             {/* Verify button */}
@@ -516,19 +553,20 @@ function Register() {
                 fontSize: '15px', marginBottom: '16px',
                 justifyContent: 'center',
                 opacity: verificationToken.length !== 6 ? 0.5 : 1,
-                cursor: verificationToken.length !== 6 ? 'not-allowed' : 'pointer'
+                cursor: verificationToken.length !== 6
+                  ? 'not-allowed' : 'pointer'
               }}
             >
               {verifying ? 'Verifying...' : 'Verify Account'}
             </button>
 
             {/* Resend */}
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
                 Didn't receive the code?
               </p>
               <button
-                onClick={handleResendSMS}
+                onClick={handleResendCode}
                 disabled={resendCooldown > 0 || resending}
                 style={{
                   background: 'none', border: 'none',
@@ -536,7 +574,8 @@ function Register() {
                     ? 'var(--text-muted)'
                     : 'var(--accent)',
                   fontSize: '13px', fontWeight: '600',
-                  cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
+                  cursor: resendCooldown > 0
+                    ? 'not-allowed' : 'pointer',
                   padding: '4px'
                 }}
               >
@@ -544,23 +583,24 @@ function Register() {
                   ? 'Sending...'
                   : resendCooldown > 0
                     ? 'Resend in ' + resendCooldown + 's'
-                    : 'Resend SMS'
+                    : 'Resend Code'
                 }
               </button>
             </div>
 
-            {/* Wrong number — go back */}
+            {/* Wrong email — go back */}
             <div style={{
               padding: '12px 16px',
               background: 'var(--bg-elevated)',
               borderRadius: '8px',
               textAlign: 'center'
             }}>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Wrong phone number?{' '}
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                Wrong email address?{' '}
                 <button
                   onClick={function() {
                     setVerificationToken('')
+                    setResendCooldown(0)
                     setStep(1)
                   }}
                   style={{

@@ -283,14 +283,24 @@ def send_critical_alert_notification(
         if not thresholds.get('critical', True):
             return
 
-        if not contacts:
-            return
-
         # Build email list
         recipients = [c['email'] for c in contacts if c.get('email')]
 
         if not recipients:
             return
+
+        from services.email import send_critical_alert_email
+        send_critical_alert_email(
+            to_emails=recipients,
+            org_name=org_name,
+            attack_type=attack_type,
+            src_ip=src_ip,
+            target_system=target_system or f'Port {dst_port}',
+            mitre_id=mitre.get('id', ''),
+            pci_dss_ref=pci_dss_ref,
+            regulatory_flags=regulatory_flags
+        )
+
 
         reg_flags_html = ''
         if regulatory_flags:
@@ -458,11 +468,6 @@ def send_critical_alert_notification(
                 'html': html_body
             }
         })
-
-        print(
-            f"Critical alert email queued "
-            f"for {len(recipients)} contacts"
-        )
 
     except Exception as e:
         print(f"Critical alert email error: {e}")
