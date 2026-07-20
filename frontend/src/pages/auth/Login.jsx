@@ -34,7 +34,7 @@ function Login() {
 
       login(token, role, { full_name, email: adminEmail, org_id, org_code })
       toast.success('Welcome back, ' + full_name.split(' ')[0])
-      navigate(redirect_to)
+      navigate('/dashboard/' + role_path, { replace: true})
 
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Login failed')

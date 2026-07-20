@@ -7,20 +7,56 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' }
 })
 
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token')
+// Request interceptor — attach access token
+api.interceptors.request.use(function(config) {
+  const state = JSON.parse(
+    localStorage.getItem('intellisense-auth') || '{}'
+  )
+  const token = state?.state?.token
   if (token) {
-    config.headers.Authorization = 'Bearer ' + token
+    config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
 
+// Response interceptor — auto refresh on 401
 api.interceptors.response.use(
-  response => response,
-  error => {
-    if (error.response?.status === 401) {
-      localStorage.clear()
-      window.location.href = '/login'
+  function(response) { return response },
+  async function(error) {
+    const original = error.config
+
+    if (error.response?.status === 401 && !original._retry) {
+      original._retry = true
+      try {
+        const state = JSON.parse(
+          localStorage.getItem('intellisense-auth') || '{}'
+        )
+        const refreshToken = state?.state?.refreshToken
+
+        if (refreshToken) {
+          const res = await api.post('/api/auth/refresh', {
+            refresh_token: refreshToken
+          })
+          const newToken = res.data.data.access_token
+
+          // Update token in localStorage
+          const stored = JSON.parse(
+            localStorage.getItem('intellisense-auth') || '{}'
+          )
+          stored.state.token = newToken
+          localStorage.setItem(
+            'intellisense-auth',
+            JSON.stringify(stored)
+          )
+
+          original.headers.Authorization = `Bearer ${newToken}`
+          return api(original)
+        }
+      } catch(e) {
+        // Refresh failed — clear auth and redirect to login
+        localStorage.removeItem('intellisense-auth')
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

@@ -1,50 +1,85 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import api from '../services/api'
 
-const PERMISSIONS = {
-  super_admin: [
-    'view_all_orgs', 'delete_org', 'suspend_org',
-    'trigger_retrain', 'approve_model',
-    'force_push_model', 'rollback_model',
-    'view_all_audit_logs', 'system_config',
-    'create_platform_admin', 'delete_admin',
-    'view_all_alerts', 'system_health'
-  ],
-  platform_admin: [
-    'view_all_orgs', 'trigger_retrain',
-    'approve_model', 'view_all_alerts',
-    'view_all_audit_logs', 'system_health', 'create_org_admin'
-  ],
-  org_admin: [
-    'view_own_org', 'view_own_alerts',
-    'view_own_logs', 'view_own_agent_status',
-    'regenerate_own_api_key'
-  ]
-}
+const useAuthStore = create(
+  persist(
+    function(set, get) {
+      return {
+        admin: null,
+        role: null,
+        token: null,
+        refreshToken: null,
+        isAuthenticated: false,
 
-const useAuthStore = create(function(set, get) {
-  return {
-    token: localStorage.getItem('token') || null,
-    role: localStorage.getItem('role') || null,
-    admin: JSON.parse(localStorage.getItem('admin') || 'null'),
-    isAuthenticated: !!localStorage.getItem('token'),
+        login: async function(email, password) {
+          const res = await api.post('/api/auth/login', {
+            email, password
+          })
+          const data = res.data.data
+          set({
+            admin: data.admin,
+            role: data.admin.role,
+            token: data.access_token,
+            refreshToken: data.refresh_token,
+            isAuthenticated: true
+          })
+          return data
+        },
 
-    login: function(token, role, adminData) {
-      localStorage.setItem('token', token)
-      localStorage.setItem('role', role)
-      localStorage.setItem('admin', JSON.stringify(adminData))
-      set({ token, role, admin: adminData, isAuthenticated: true })
+        logout: async function() {
+          try {
+            await api.post('/api/auth/logout')
+          } catch(e) {
+            // ignore logout errors
+          } finally {
+            set({
+              admin: null,
+              role: null,
+              token: null,
+              refreshToken: null,
+              isAuthenticated: false
+            })
+            // Clear browser history so back button
+            // cannot return to dashboard
+            window.location.replace('/login')
+            window.history.pushState(null, '', '/login')
+          }
+        },
+
+        refreshAccessToken: async function() {
+          const { refreshToken } = get()
+          if (!refreshToken) return false
+          try {
+            const res = await api.post('/api/auth/refresh', {
+              refresh_token: refreshToken
+            })
+            set({ token: res.data.data.access_token })
+            return true
+          } catch(e) {
+            get().logout()
+            return false
+          }
+        },
+
+        setToken: function(token) {
+          set({ token })
+        }
+      }
     },
-
-    logout: function() {
-      localStorage.clear()
-      set({ token: null, role: null, admin: null, isAuthenticated: false })
-    },
-
-    hasPermission: function(permission) {
-      const role = get().role
-      return PERMISSIONS[role]?.includes(permission) || false
+    {
+      name: 'intellisense-auth',
+      partialize: function(state) {
+        return {
+          admin: state.admin,
+          role: state.role,
+          token: state.token,
+          refreshToken: state.refreshToken,
+          isAuthenticated: state.isAuthenticated
+        }
+      }
     }
-  }
-})
+  )
+)
 
 export default useAuthStore

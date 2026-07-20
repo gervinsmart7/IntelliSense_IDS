@@ -1,153 +1,20 @@
-from fastapi import HTTPException, Depends, Header
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
-import bcrypt
-import hashlib
 from datetime import datetime, timedelta
-from firebase_admin import firestore
+from typing import Optional
+from jose import JWTError, jwt
+from fastapi import Depends, HTTPException, Header
 from services.firebase import get_db
 import os
-from dotenv import load_dotenv
+import bcrypt
 
-load_dotenv()
+db = get_db()
 
-
-def get_firestore_db():
-    return get_db()
-
-# JWT Settings
-JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key')
-JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', 'HS256')
-JWT_EXPIRY_HOURS = int(os.getenv('JWT_EXPIRY_HOURS', 8))
-
-# HTTP Bearer scheme
-security = HTTPBearer()
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', '1014aeef41d802d87bab4eb71da95a1d5cb6d724b8def0f504ce30b564d6e2c6')
+ALGORITHM = 'HS256'
+ACCESS_TOKEN_EXPIRE_MINUTES = 60        # 1 hour
+REFRESH_TOKEN_EXPIRE_DAYS = 7           # 7 days
 
 # ─────────────────────────────────────────
-# PASSWORD FUNCTIONS
-# ─────────────────────────────────────────
-
-def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed.decode('utf-8')
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(
-        plain_password.encode('utf-8'),
-        hashed_password.encode('utf-8')
-    )
-
-# ─────────────────────────────────────────
-# JWT TOKEN FUNCTIONS
-# ─────────────────────────────────────────
-
-def generate_token(data: dict) -> str:
-    payload = data.copy()
-    expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS)
-    payload.update({"exp": expire})
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-def decode_token(token: str) -> dict:
-    try:
-        payload = jwt.decode(
-            token,
-            JWT_SECRET,
-            algorithms=[JWT_ALGORITHM]
-        )
-        return payload
-    except JWTError:
-        return None
-
-# ─────────────────────────────────────────
-# AGENT AUTH DEPENDENCY
-# ─────────────────────────────────────────
-
-def verify_api_key(api_key: str):
-    if not api_key:
-        return None
-
-    incoming_hash = hashlib.sha256(api_key.encode()).hexdigest()
-
-    db = get_firestore_db()
-    orgs = db.collection('organisations').where(
-        filter=firestore.FieldFilter('api_key_hash', '==', incoming_hash)
-    ).get()
-
-    if not orgs:
-        return None
-
-    org = orgs[0].to_dict()
-
-    if org.get('status') != 'active':
-        return None
-
-    return org
-
-
-async def get_agent_org(x_api_key: str = Header(None)):
-    if not x_api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="API key required — include X-API-Key header"
-        )
-
-    org = verify_api_key(x_api_key)
-
-    if not org:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or inactive API key"
-        )
-
-    return org
-
-
-# ─────────────────────────────────────────
-# GET CURRENT ADMIN DEPENDENCY
-# ─────────────────────────────────────────
-
-async def get_current_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-):
-    token = credentials.credentials
-    payload = decode_token(token)
-
-    if not payload:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token"
-        )
-
-    # Verify admin still exists and is active
-    db = get_firestore_db()
-    admin_doc = db.collection('admins')\
-                  .document(payload['admin_id']).get()
-
-    if not admin_doc.exists:
-        raise HTTPException(
-            status_code=401,
-            detail="Admin account not found"
-        )
-
-    admin = admin_doc.to_dict()
-
-    if not admin.get('is_active'):
-        raise HTTPException(
-            status_code=403,
-            detail="Account is not active"
-        )
-
-    if admin.get('is_locked'):
-        raise HTTPException(
-            status_code=403,
-            detail="Account is locked"
-        )
-
-    return payload
-
-# ─────────────────────────────────────────
-# ROLE PERMISSION CHECKER
+# ROLE PERMISSIONS
 # ─────────────────────────────────────────
 
 ROLE_PERMISSIONS = {
@@ -180,17 +47,193 @@ ROLE_PERMISSIONS = {
     ]
 }
 
-def has_permission(role: str, permission: str) -> bool:
-    return permission in ROLE_PERMISSIONS.get(role, [])
+# ─────────────────────────────────────────
+# TOKEN CREATION
+# ─────────────────────────────────────────
+
+def create_access_token(data: dict) -> str:
+    """
+    Creates a short-lived access token (1 hour)
+    Used for API authentication on every request
+    """
+    payload = data.copy()
+    payload['exp'] = datetime.utcnow() + timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    payload['type'] = 'access'
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(data: dict) -> str:
+    """
+    Creates a long-lived refresh token (7 days)
+    Used to get a new access token without re-login
+    """
+    payload = data.copy()
+    payload['exp'] = datetime.utcnow() + timedelta(
+        days=REFRESH_TOKEN_EXPIRE_DAYS
+    )
+    payload['type'] = 'refresh'
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_token(token: str) -> dict:
+    """Decodes and validates a JWT token"""
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+        return payload
+    except JWTError as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid or expired token: {str(e)}"
+        )
+
+# ─────────────────────────────────────────
+# PASSWORD HELPERS
+# ─────────────────────────────────────────
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(
+        plain.encode('utf-8'),
+        hashed.encode('utf-8')
+    )
+
+# ─────────────────────────────────────────
+# AUTH DEPENDENCIES
+# ─────────────────────────────────────────
+
+async def get_current_admin(
+    authorization: Optional[str] = Header(None)
+) -> dict:
+    """
+    FastAPI dependency — extracts and validates
+    the access token from Authorization header
+    Returns the admin document
+    """
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header missing"
+        )
+
+    if not authorization.startswith('Bearer '):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authorization format. Use: Bearer <token>"
+        )
+
+    token = authorization[7:]
+
+    try:
+        payload = decode_token(token)
+    except HTTPException:
+        raise
+
+    # Verify it is an access token not a refresh token
+    if payload.get('type') != 'access':
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token type. Access token required."
+        )
+
+    admin_id = payload.get('admin_id')
+    if not admin_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token payload"
+        )
+
+    # Fetch admin from Firestore
+    admin_doc = db.collection('admins').document(admin_id).get()
+
+    if not admin_doc.exists:
+        raise HTTPException(
+            status_code=401,
+            detail="Admin account not found"
+        )
+
+    admin_data = admin_doc.to_dict()
+
+    if not admin_data.get('is_active', False):
+        raise HTTPException(
+            status_code=403,
+            detail="Account is not active"
+        )
+
+    if admin_data.get('is_locked', False):
+        raise HTTPException(
+            status_code=403,
+            detail="Account is locked"
+        )
+
+    return {
+        'admin_id': admin_id,
+        'email': admin_data.get('email'),
+        'role': admin_data.get('role'),
+        'org_id': admin_data.get('org_id'),
+        'org_code': admin_data.get('org_code'),
+        'full_name': admin_data.get('full_name')
+    }
+
 
 def require_permission(permission: str):
-    async def permission_checker(
+    """
+    FastAPI dependency factory
+    Checks the admin has a specific permission
+    Usage: Depends(require_permission('delete_org'))
+    """
+    async def checker(
         current_admin: dict = Depends(get_current_admin)
     ):
-        if not has_permission(current_admin['role'], permission):
+        role = current_admin.get('role')
+        allowed = ROLE_PERMISSIONS.get(role, [])
+        if permission not in allowed:
             raise HTTPException(
                 status_code=403,
-                detail="You do not have permission to perform this action"
+                detail=f"Permission denied: {permission} required"
             )
         return current_admin
-    return permission_checker
+    return checker
+
+
+async def get_agent_org(
+    x_api_key: Optional[str] = Header(None)
+) -> dict:
+    """
+    FastAPI dependency for agent endpoints
+    Validates the agent API key
+    """
+    if not x_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="X-API-Key header missing"
+        )
+
+    import hashlib
+    key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+
+    orgs = db.collection('organisations').where(
+        filter=__import__('firebase_admin').firestore.FieldFilter(
+            'api_key_hash', '==', key_hash
+        )
+    ).get()
+
+    if not orgs:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key"
+        )
+
+    org_data = orgs[0].to_dict()
+
+    if org_data.get('status') not in ['active']:
+        raise HTTPException(
+            status_code=403,
+            detail="Organisation is not active"
+        )
+
+    return org_data

@@ -248,10 +248,24 @@ async def login(payload: LoginRequest, request: Request):
         status='success'
     )
 
+ token_data = {
+        'admin_id': admin_data['admin_id'],
+        'email': admin_data['email'],
+        'role': admin_data['role'],
+        'org_id': admin_data.get('org_id'),
+        'org_code': admin_data.get('org_code')
+    }
+
+    access_token = create_access_token(token_data)
+    refresh_token = create_refresh_token(token_data)
+
     return {
         "status": "success",
         "data": {
-            "token": token,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "expires_in": 3600,
             "role": admin['role'],
             "full_name": admin['full_name'],
             "email": admin['email'],
@@ -261,6 +275,45 @@ async def login(payload: LoginRequest, request: Request):
         }
     }
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+@router.post("/refresh")
+async def refresh_token(payload: RefreshRequest):
+    """
+    Returns a new access token using a valid refresh token
+    Called automatically by frontend when access token expires
+    """
+    try:
+        from services.auth import decode_token, create_access_token
+        token_data = decode_token(payload.refresh_token)
+
+        if token_data.get('type') != 'refresh':
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token type"
+            )
+
+        new_access_token = create_access_token({
+            'admin_id': token_data['admin_id'],
+            'email': token_data['email'],
+            'role': token_data['role'],
+            'org_id': token_data.get('org_id'),
+            'org_code': token_data.get('org_code')
+        })
+
+        return {
+            "status": "success",
+            "data": {
+                "access_token": new_access_token,
+                "token_type": "bearer",
+                "expires_in": 3600
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 @router.post("/logout")
 async def logout(
