@@ -483,7 +483,7 @@ def check_all_kill_chains():
         f"Scheduler started — "
         f"Retraining every {interval_days} days | "
         f"Kill chains hourly | "
-        f"Briefings daily at 8am UTC"
+        f"Briefings daily at 8am UTC (interval_days={interval_days})"
     )
 
 def stop_scheduler():

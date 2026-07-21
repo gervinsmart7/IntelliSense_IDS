@@ -173,13 +173,13 @@ def run_retraining_pipeline(
         # Step 2 — Get next version
         version = get_next_version()
 
-fp_list = fetch_false_positives()
-if fp_list and len(combined_df) > 0:
-    fp_attack_types = [
-        fp.get('attack_type') for fp in fp_list
-        if fp.get('attack_type')
-    ]
-    print(f"Applying {len(fp_attack_types)} false positive corrections")
+        fp_list = fetch_false_positives()
+        if fp_list and len(combined_df) > 0:
+            fp_attack_types = [
+                fp.get('attack_type') for fp in fp_list
+                if fp.get('attack_type')
+            ]
+            print(f"Applying {len(fp_attack_types)} false positive corrections")
 
         # Step 3 — Run training pipeline
         result = run_training_pipeline(

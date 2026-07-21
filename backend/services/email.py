@@ -118,6 +118,191 @@ def send_verification_email(
     return send_email(to_email, subject, html)
 
 
+def send_password_reset_email(email: str, reset_token: str) -> dict:
+    """
+    Sends password reset link to admin email
+    """
+    subject = "Reset your IntelliSense IDS password"
+    reset_url = f"https://intellisense-ids.web.app/auth/reset-password?token={reset_token}"
+
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial,sans-serif;background:#0F1117;
+                 color:#E2E8F0;padding:40px;margin:0;">
+      <div style="max-width:520px;margin:0 auto;background:#1A1D27;
+                  border-radius:16px;padding:40px;
+                  border:1px solid rgba(255,255,255,0.06);">
+
+        <div style="margin-bottom:32px;">
+          <p style="font-weight:700;font-size:18px;
+                    color:#E2E8F0;margin:0 0 2px 0;">
+            🛡️ IntelliSense IDS
+          </p>
+          <p style="font-size:10px;color:rgba(255,255,255,0.4);
+                    margin:0;letter-spacing:0.1em;">
+            FINANCIAL SECURITY PLATFORM
+          </p>
+        </div>
+
+        <h1 style="font-size:22px;font-weight:700;
+                   color:#E2E8F0;margin-bottom:8px;">
+          Reset Your Password
+        </h1>
+
+        <p style="font-size:14px;color:#64748B;
+                  margin-bottom:28px;line-height:1.6;">
+          We received a request to reset your IntelliSense IDS password.
+          Click the button below to set a new password. This link expires in 1 hour.
+        </p>
+
+        <div style="text-align:center;margin-bottom:28px;">
+          <a href="{reset_url}" style="background:#6366F1;color:#FFFFFF;
+                    text-decoration:none;padding:14px 32px;border-radius:8px;
+                    font-weight:600;display:inline-block;">
+            Reset Password
+          </a>
+        </div>
+
+        <p style="font-size:12px;color:#64748B;line-height:1.6;">
+          If you did not request a password reset, please ignore this email.
+          If you have trouble clicking the button, copy and paste this URL in your browser:<br/>
+          <code>{reset_url}</code>
+        </p>
+
+        <div style="margin-top:32px;padding-top:24px;
+                    border-top:1px solid rgba(255,255,255,0.06);">
+          <p style="font-size:11px;color:#64748B;margin:0;">
+            IntelliSense IDS — Financial Security Platform 2026
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+    '''
+
+    return send_email(email, subject, html)
+
+
+def send_critical_alert_email(
+    to_emails: list,
+    org_name: str,
+    attack_type: str,
+    src_ip: str,
+    target_system: str,
+    mitre_id: str,
+    pci_dss_ref: str,
+    regulatory_flags: list
+) -> dict:
+    """
+    Sends critical security alert email to org admins
+    """
+    subject = f"🚨 CRITICAL ALERT: {attack_type} detected in {org_name}"
+
+    flags_html = ''
+    if regulatory_flags:
+        flags_list = ''.join([
+            f'<li style="color: #F87171;">{flag}</li>'
+            for flag in regulatory_flags
+        ])
+        flags_html = f'<ul>{flags_list}</ul>'
+
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial,sans-serif;background:#0F1117;
+                 color:#E2E8F0;padding:40px;margin:0;">
+      <div style="max-width:520px;margin:0 auto;background:#1A1D27;
+                  border-radius:16px;padding:40px;
+                  border:2px solid #F87171;">
+
+        <div style="background:rgba(248,113,113,0.1);border-left:4px solid #F87171;
+                    padding:16px;margin-bottom:24px;">
+          <p style="font-size:14px;font-weight:700;color:#F87171;margin:0;">
+            🚨 CRITICAL SECURITY ALERT
+          </p>
+        </div>
+
+        <h1 style="font-size:20px;font-weight:700;color:#E2E8F0;margin-bottom:16px;">
+          {attack_type}
+        </h1>
+
+        <p style="font-size:13px;color:#64748B;margin-bottom:20px;line-height:1.6;">
+          A critical security threat has been detected on your network. Immediate investigation required.
+        </p>
+
+        <div style="background:#22263A;border-radius:8px;padding:16px;margin-bottom:20px;">
+          <div style="margin-bottom:12px;">
+            <span style="font-size:12px;color:#64748B;">Organisation</span><br/>
+            <span style="font-size:13px;color:#E2E8F0;font-weight:600;">{org_name}</span>
+          </div>
+          <div style="margin-bottom:12px;">
+            <span style="font-size:12px;color:#64748B;">Attack Type</span><br/>
+            <span style="font-size:13px;color:#F87171;font-weight:600;">{attack_type}</span>
+          </div>
+          <div style="margin-bottom:12px;">
+            <span style="font-size:12px;color:#64748B;">Source IP</span><br/>
+            <span style="font-size:13px;color:#E2E8F0;font-family:monospace;">{src_ip}</span>
+          </div>
+          <div style="margin-bottom:12px;">
+            <span style="font-size:12px;color:#64748B;">Target System</span><br/>
+            <span style="font-size:13px;color:#E2E8F0;">{target_system}</span>
+          </div>
+          <div>
+            <span style="font-size:12px;color:#64748B;">MITRE ATT&CK</span><br/>
+            <span style="font-size:13px;color:#E2E8F0;font-family:monospace;">{mitre_id}</span>
+          </div>
+        </div>
+
+        {flags_html}
+
+        <p style="font-size:12px;color:#64748B;line-height:1.6;margin-bottom:20px;">
+          Log in to your dashboard immediately to review the full alert details, view forensic data,
+          and take remediation actions.
+        </p>
+
+        <div style="text-align:center;margin-bottom:20px;">
+          <a href="https://intellisense-ids.web.app/alerts" style="background:#F87171;color:#FFFFFF;
+                    text-decoration:none;padding:12px 28px;border-radius:8px;
+                    font-weight:600;display:inline-block;">
+            Review Alert
+          </a>
+        </div>
+
+        <div style="margin-top:24px;padding-top:20px;
+                    border-top:1px solid rgba(255,255,255,0.06);">
+          <p style="font-size:11px;color:#64748B;margin:0;">
+            IntelliSense IDS — Financial Security Platform 2026<br/>
+            This is an automated security notification.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+    '''
+
+    try:
+        if not SENDGRID_API_KEY:
+            print("SendGrid API key not configured")
+            return {'status': 'error', 'message': 'Email not configured'}
+
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        for to_email in to_emails:
+            message = Mail(
+                from_email=(SENDGRID_FROM_EMAIL, SENDGRID_FROM_NAME),
+                to_emails=to_email,
+                subject=subject,
+                html_content=html
+            )
+            response = sg.send(message)
+            print(f"Critical alert email sent to {to_email} — Status: {response.status_code}")
+
+        return {'status': 'success', 'message': 'Alert emails sent'}
+    except Exception as e:
+        print(f"Critical alert email error: {e}")
+        return {'status': 'error', 'message': str(e)}
+
+
 def send_welcome_email(
     to_email: str,
     org_name: str,
