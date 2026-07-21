@@ -3,7 +3,8 @@ from firebase_admin import firestore
 from services.firebase import get_db
 from services.auth import (
     verify_password,
-    generate_token,
+    create_access_token,
+    create_refresh_token,
     decode_token,
     get_current_admin,
     hash_password
@@ -221,7 +222,7 @@ async def login(payload: LoginRequest, request: Request):
         })
 
     # Generate JWT token
-    token = generate_token({
+    token = create_access_token({
         'admin_id': admin['admin_id'],
         'email': admin['email'],
         'role': admin['role'],
@@ -249,11 +250,11 @@ async def login(payload: LoginRequest, request: Request):
     )
 
     token_data = {
-        'admin_id': admin_data['admin_id'],
-        'email': admin_data['email'],
-        'role': admin_data['role'],
-        'org_id': admin_data.get('org_id'),
-        'org_code': admin_data.get('org_code')
+        'admin_id': admin['admin_id'],
+        'email': admin['email'],
+        'role': admin['role'],
+        'org_id': admin.get('org_id'),
+        'org_code': admin.get('org_code')
     }
 
     access_token = create_access_token(token_data)
