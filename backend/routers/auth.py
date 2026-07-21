@@ -221,16 +221,6 @@ async def login(payload: LoginRequest, request: Request):
             'known_ips': known_ips
         })
 
-    # Generate JWT token
-    token = create_access_token({
-        'admin_id': admin['admin_id'],
-        'email': admin['email'],
-        'role': admin['role'],
-        'org_id': admin.get('org_id'),
-        'org_code': admin.get('org_code'),
-        'full_name': admin['full_name']
-    })
-
     # Determine redirect route based on role
     role_routes = {
         'super_admin': '/dashboard/super',
