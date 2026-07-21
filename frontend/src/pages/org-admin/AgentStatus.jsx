@@ -4,7 +4,7 @@ import {
   AlertTriangle, RefreshCw, Copy,
   Monitor, Server
 } from 'lucide-react'
-import { agentsAPI } from '../../services/api'
+import { orgAPI } from '../../services/api'
 import Layout from '../../components/Layout'
 import TopBar from '../../components/TopBar'
 import useAuthStore from '../../store/useAuthStore'
@@ -19,6 +19,9 @@ function AgentStatus() {
   const { admin } = useAuthStore()
   const [org, setOrg] = useState(null)
   const [copied, setCopied] = useState(null)
+  const [newKey, setNewKey] = useState(null)
+  const [showKey, setShowKey] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const [selectedOS, setSelectedOS] = useState('linux')
 
   useEffect(function() {
@@ -36,6 +39,23 @@ function AgentStatus() {
     )
     return unsub
   }, [admin?.org_id])
+
+  async function handleRegenerateKey() {
+    if (!window.confirm(
+      'Regenerate API key? The current agent will disconnect and need reconfiguring.'
+    )) return
+
+    setRegenerating(true)
+    try {
+        const res = await orgAPI.regenerateKey(admin.org_id)
+        setNewKey(res.data.data.api_key)
+        toast.success('API key regenerated')
+    } catch(e) {
+        toast.error('Failed to regenerate key')
+    } finally {
+        setRegenerating(false)
+      }
+  }
 
   function copyText(text, key) {
     navigator.clipboard.writeText(text)

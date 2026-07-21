@@ -9,9 +9,7 @@ const api = axios.create({
 
 // Request interceptor — attach access token
 api.interceptors.request.use(function(config) {
-  const state = JSON.parse(
-    localStorage.getItem('intellisense-auth') || '{}'
-  )
+  const state = JSON.parse(localStorage.getItem('intellisense-auth') || '{}')
   const token = state?.state?.token
   if (token) {
     config.headers.Authorization = `Bearer ${token}`

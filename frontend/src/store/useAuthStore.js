@@ -18,13 +18,24 @@ const useAuthStore = create(
           })
           const data = res.data.data
           set({
-            admin: data.admin,
-            role: data.admin.role,
+            admin: data.admin || { full_name: data.full_name, email: data.email, org_id: data.org_id, org_code: data.org_code },
+            role: data.role || (data.admin && data.admin.role),
             token: data.access_token,
             refreshToken: data.refresh_token,
             isAuthenticated: true
           })
           return data
+        },
+
+        // Set authentication state directly after successful login
+        setAuth: function(accessToken, refreshToken, role, adminObj) {
+          set({
+            token: accessToken,
+            refreshToken: refreshToken,
+            role: role,
+            admin: adminObj,
+            isAuthenticated: true
+          })
         },
 
         logout: async function() {

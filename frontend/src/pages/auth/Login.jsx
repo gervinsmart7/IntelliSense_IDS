@@ -15,7 +15,7 @@ function Login() {
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
   const navigate = useNavigate()
-  const { login } = useAuthStore()
+  const setAuth = useAuthStore(state => state.setAuth)
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -27,14 +27,31 @@ function Login() {
     try {
       const response = await authAPI.login(email, password)
       const {
-        token, role, full_name,
+        access_token, refresh_token, role, full_name,
         email: adminEmail,
         org_id, org_code, redirect_to
       } = response.data.data
 
-      login(token, role, { full_name, email: adminEmail, org_id, org_code })
+      // Persist auth state in the store
+      if (setAuth) {
+        setAuth(access_token, refresh_token, role, { full_name, email: adminEmail, org_id, org_code })
+      }
+      // Also persist immediately to localStorage to ensure API interceptor can pick up token
+      try {
+        localStorage.setItem('intellisense-auth', JSON.stringify({
+          state: {
+            token: access_token,
+            refreshToken: refresh_token,
+            role: role,
+            admin: { full_name, email: adminEmail, org_id, org_code },
+            isAuthenticated: true
+          }
+        }))
+      } catch (e) {
+        // ignore storage errors
+      }
       toast.success('Welcome back, ' + full_name.split(' ')[0])
-      navigate('/dashboard/' + role_path, { replace: true})
+      navigate(redirect_to, { replace: true})
 
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Login failed')
