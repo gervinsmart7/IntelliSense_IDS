@@ -102,6 +102,11 @@ def verify_password(plain: str, hashed: str) -> bool:
         hashed.encode('utf-8')
     )
 
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
 # ─────────────────────────────────────────
 # AUTH DEPENDENCIES
 # ─────────────────────────────────────────
