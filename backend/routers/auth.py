@@ -248,7 +248,7 @@ async def login(payload: LoginRequest, request: Request):
         status='success'
     )
 
- token_data = {
+    token_data = {
         'admin_id': admin_data['admin_id'],
         'email': admin_data['email'],
         'role': admin_data['role'],
