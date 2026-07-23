@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 from firebase_admin import firestore
 from services.firebase import get_db
-from services.auth import require_permission
+from services.auth import require_permission, hash_password
 from services.audit import log_action
 from services.email import send_admin_invite_email
 import secrets
@@ -225,6 +225,70 @@ async def get_online_admins(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/accept-invite")
+async def accept_invite(payload: dict):
+    token = payload.get('token')
+    email = payload.get('email')
+    password = payload.get('password')
+    full_name = payload.get('full_name')
+
+    if not token or not email or not password or not full_name:
+        raise HTTPException(status_code=400, detail="Token, email, full name and password are required")
+
+    invite_docs = db.collection('invitations').where(
+        filter=firestore.FieldFilter('token', '==', token)
+    ).get()
+
+    if not invite_docs:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    invite_doc = invite_docs[0]
+    invite_data = invite_doc.to_dict()
+
+    if invite_data.get('email', '').lower() != email.lower():
+        raise HTTPException(status_code=400, detail="Email does not match the invitation")
+
+    if invite_data.get('status') == 'accepted':
+        raise HTTPException(status_code=400, detail="Invitation already accepted")
+
+    existing = db.collection('admins').where(
+        filter=firestore.FieldFilter('email', '==', email.lower())
+    ).get()
+
+    if existing:
+        raise HTTPException(status_code=400, detail="An account with this email already exists")
+
+    admin_id = str(uuid.uuid4())
+    admin_data = {
+        'admin_id': admin_id,
+        'full_name': full_name,
+        'email': email.lower(),
+        'password_hash': hash_password(password),
+        'role': 'platform_admin',
+        'is_active': True,
+        'is_locked': False,
+        'failed_attempts': 0,
+        'known_ips': [],
+        'created_by': invite_data.get('invited_by', 'system'),
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'last_login': None
+    }
+
+    db.collection('admins').document(admin_id).set(admin_data)
+    invite_doc.reference.update({'status': 'accepted', 'accepted_at': firestore.SERVER_TIMESTAMP})
+
+    return {
+        "status": "success",
+        "message": "Invitation accepted. You can now log in.",
+        "data": {
+            "admin_id": admin_id,
+            "email": email.lower(),
+            "full_name": full_name,
+            "role": "platform_admin"
+        }
+    }
+
 
 @router.post("/create-platform-admin")
 async def create_platform_admin(

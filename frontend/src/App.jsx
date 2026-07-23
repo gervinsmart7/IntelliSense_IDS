@@ -6,6 +6,7 @@ import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 import VerifyEmail from './pages/auth/VerifyEmail'
 import ResetPassword from './pages/auth/ResetPassword'
+import AcceptInvite from './pages/auth/AcceptInvite'
 import SuperDashboard from './pages/super-admin/SuperDashboard'
 import Organisations from './pages/super-admin/Organisations'
 import ModelManagement from './pages/super-admin/ModelManagement'
@@ -96,6 +97,7 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/verify-account" element={<VerifyEmail />} />
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/unauthorised" element={<Unauthorised />} />
 

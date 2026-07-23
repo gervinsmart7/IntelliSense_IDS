@@ -216,7 +216,7 @@ def send_admin_invite_email(
     Sends platform admin invitation email with invite token
     """
     subject = f"You're invited to IntelliSense IDS"
-    invite_url = f"https://intellisense-ids.web.app/register?invite_token={token}"
+    invite_url = f"https://intellisense-ids.web.app/accept-invite?token={token}&email={quote(to_email)}"
 
     html = f'''
     <!DOCTYPE html>
