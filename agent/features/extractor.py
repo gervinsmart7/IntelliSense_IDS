@@ -270,7 +270,7 @@ class FeatureExtractor:
     def get_feature_columns(self, df):
         exclude_cols = [
             'Flow ID', 'Src IP', 'Dst IP',
-            'Src Port', 'Dst Port', 'Protocol',
+            'Src Port', 'Protocol',
             'Timestamp', 'Label',
             'src_ip', 'dst_ip', 'src_port',
             'dst_port', 'protocol', 'timestamp',
@@ -280,3 +280,19 @@ class FeatureExtractor:
             col for col in df.columns
             if col not in exclude_cols
         ]
+
+    def align_to_model_schema(self, df, feature_names):
+        """
+        trained schema, and forces the exact fit-time order.
+        Renames/duplicates columns to match the partner's
+        """
+        df = df.rename(columns={'Dst Port': 'Destination Port'})
+    
+        if 'Fwd Header Length' in df.columns and 'Fwd Header Length.1' not in df.columns:
+            df['Fwd Header Length.1'] = df['Fwd Header Length']
+    
+        missing = [f for f in feature_names if f not in df.columns]
+        if missing:
+            raise ValueError(f"Missing required features: {missing}")
+    
+        return df[list(feature_names)]

@@ -143,4 +143,3 @@ def confirm_model_update(version, status):
         return response.status_code == 200
     except Exception as e:
         print(f"Update confirm error: {e}")
-        return False

@@ -94,6 +94,7 @@ function App() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={isAuthenticated ? <RootRedirect /> : <Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-account" element={<VerifyEmail />} />
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/unauthorised" element={<Unauthorised />} />

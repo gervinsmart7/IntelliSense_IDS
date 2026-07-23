@@ -10,3 +10,5 @@ joblib
 scikit-learn
 cicflowmeter
 python-dotenv
+
+pytest

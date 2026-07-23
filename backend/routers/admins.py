@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 from firebase_admin import firestore
 from services.firebase import get_db
-from services.auth import get_current_admin, require_permission
+from services.auth import require_permission
 from services.audit import log_action
+from services.email import send_admin_invite_email
 import secrets
 import uuid
 
@@ -44,6 +45,19 @@ async def invite_platform_admin(
         'status': 'pending',
         'created_at': firestore.SERVER_TIMESTAMP
     })
+
+    email_result = send_admin_invite_email(
+        to_email=email,
+        full_name=full_name,
+        inviter_name=current_admin.get('full_name', current_admin.get('email', 'Admin')),
+        token=token
+    )
+
+    if email_result.get('status') != 'success':
+        raise HTTPException(
+            status_code=500,
+            detail=f"Invitation email failed to send: {email_result.get('message', 'unknown error')}"
+        )
 
     log_action(
         admin_id=current_admin['admin_id'],

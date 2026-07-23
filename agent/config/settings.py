@@ -11,12 +11,6 @@ NETWORK_INTERFACE = os.getenv('NETWORK_INTERFACE', 'eth0')
 # Backend
 BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:8000')
 
-# Firebase
-FIREBASE_CREDENTIALS_PATH = os.getenv(
-    'FIREBASE_CREDENTIALS_PATH',
-    '../backend/intellisense-ids-firebase-adminsdk-fbsvc-57bca2774b.json'
-)
-
 # AWS
 AWS_BUCKET_NAME = os.getenv('AWS_BUCKET_NAME')
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
@@ -28,6 +22,7 @@ LOG_UPLOAD_INTERVAL = int(os.getenv('LOG_UPLOAD_INTERVAL', 60))
 
 # Model
 CURRENT_MODEL_VERSION = os.getenv('CURRENT_MODEL_VERSION', 'none')
+CURRENT_MODEL_DIR = os.getenv('CURRENT_MODEL_DIR', 'models/current')
 MODEL_PATH = os.getenv('MODEL_PATH', 'models/current_model.pkl')
 
 # Paths
@@ -107,9 +102,9 @@ FINANCE_SEVERITY_MAP = {
     'FTP-Patator': 'high',
     'SSH-Patator': 'high',
     'Bot': 'high',
-    'Web Attack XSS': 'medium',
-    'Web Attack SQL Injection': 'critical',
-    'Web Attack Brute Force': 'high',
+    'Web Attack - XSS': 'medium',
+    'Web Attack - SQL Injection': 'critical',
+    'Web Attack - Brute Force': 'high',
     'Infiltration': 'critical',
     'Heartbleed': 'critical',
 

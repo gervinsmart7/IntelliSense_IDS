@@ -1,10 +1,12 @@
 import os
+from urllib.parse import quote
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
 SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL')
 SENDGRID_FROM_NAME = os.getenv('SENDGRID_FROM_NAME', 'IntelliSense IDS')
+FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'https://intellisense-ids.web.app')
 
 
 def send_email(to_email: str, subject: str, html_content: str) -> dict:
@@ -43,6 +45,7 @@ def send_verification_email(
     Sends 6-digit verification code to new org admin
     """
     subject = f"Your IntelliSense IDS verification code is {token}"
+    verify_url = f"{FRONTEND_BASE_URL}/verify-account?email={quote(to_email)}&token={token}"
 
     html = f'''
     <!DOCTYPE html>
@@ -95,6 +98,25 @@ def send_verification_email(
           </p>
           <p style="font-size:12px;color:#64748B;margin-top:14px;">
             Expires in 24 hours
+          </p>
+        </div>
+
+        <div style="background:#22263A;
+                    border:1px solid rgba(99,102,241,0.2);
+                    border-radius:12px;padding:20px;
+                    text-align:center;margin-bottom:28px;">
+          <p style="font-size:12px;color:#64748B;
+                    text-transform:uppercase;
+                    letter-spacing:0.1em;margin-bottom:10px;">
+            Need a faster option?
+          </p>
+          <a href="{verify_url}" style="background:#6366F1;color:#FFFFFF;
+                    text-decoration:none;padding:12px 24px;border-radius:8px;
+                    font-weight:600;display:inline-block;">
+            Verify My Account
+          </a>
+          <p style="font-size:12px;color:#64748B;margin-top:10px;line-height:1.6;">
+            This link completes verification directly from your email if you miss the code during registration.
           </p>
         </div>
 
@@ -182,6 +204,85 @@ def send_password_reset_email(email: str, reset_token: str) -> dict:
     '''
 
     return send_email(email, subject, html)
+
+
+def send_admin_invite_email(
+    to_email: str,
+    full_name: str,
+    inviter_name: str,
+    token: str
+) -> dict:
+    """
+    Sends platform admin invitation email with invite token
+    """
+    subject = f"You're invited to IntelliSense IDS"
+    invite_url = f"https://intellisense-ids.web.app/register?invite_token={token}"
+
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial,sans-serif;background:#0F1117;
+                 color:#E2E8F0;padding:40px;margin:0;">
+      <div style="max-width:520px;margin:0 auto;background:#1A1D27;
+                  border-radius:16px;padding:40px;
+                  border:1px solid rgba(255,255,255,0.06);">
+
+        <div style="margin-bottom:32px;">
+          <p style="font-weight:700;font-size:18px;
+                    color:#E2E8F0;margin:0 0 2px 0;">
+            🛡️ IntelliSense IDS
+          </p>
+          <p style="font-size:10px;color:rgba(255,255,255,0.4);
+                    margin:0;letter-spacing:0.1em;">
+            FINANCIAL SECURITY PLATFORM
+          </p>
+        </div>
+
+        <h1 style="font-size:22px;font-weight:700;
+                   color:#E2E8F0;margin-bottom:8px;">
+          You have been invited to IntelliSense IDS
+        </h1>
+
+        <p style="font-size:14px;color:#64748B;
+                  margin-bottom:28px;line-height:1.6;">
+          Hello {full_name},<br/>
+          <strong>{inviter_name}</strong> has invited you to join IntelliSense IDS as a platform administrator.
+        </p>
+
+        <div style="background:#22263A;border-radius:12px;padding:28px;
+                    margin-bottom:28px;border:1px solid rgba(99,102,241,0.2);">
+          <p style="font-size:12px;color:#64748B;margin-bottom:10px;">
+            Click below to accept your invitation and complete account setup:
+          </p>
+          <div style="text-align:center;margin-bottom:16px;">
+            <a href="{invite_url}" style="background:#6366F1;color:#FFFFFF;
+                      text-decoration:none;padding:14px 32px;border-radius:8px;
+                      font-weight:600;display:inline-block;">
+              Accept Invitation
+            </a>
+          </div>
+          <p style="font-size:12px;color:#64748B;line-height:1.6;margin:0;">
+            If the button does not work, copy and paste this link into your browser:<br/>
+            <a href="{invite_url}" style="color:#A5B4FC;word-break:break-all;">{invite_url}</a>
+          </p>
+        </div>
+
+        <p style="font-size:13px;color:#64748B;line-height:1.6;">
+          If you did not expect this invitation, please ignore this email or contact the person who invited you.
+        </p>
+
+        <div style="margin-top:32px;padding-top:24px;
+                    border-top:1px solid rgba(255,255,255,0.06);">
+          <p style="font-size:11px;color:#64748B;margin:0;">
+            IntelliSense IDS — Financial Security Platform 2026
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+    '''
+
+    return send_email(to_email, subject, html)
 
 
 def send_critical_alert_email(

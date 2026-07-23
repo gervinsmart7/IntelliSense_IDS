@@ -1,3 +1,33 @@
+import asyncio
+import asyncio
+
+# --- Compatibility shim for Python 3.14+ ---
+# asyncio's old child-watcher API (set_child_watcher / get_child_watcher /
+# SafeChildWatcher) was removed in Python 3.14. pyshark's internal
+# Capture._setup_eventloop() still calls these directly, so we restore
+# harmless no-op stand-ins before pyshark ever touches them. Modern asyncio
+# manages subprocess cleanup internally and no longer needs this system —
+# these stand-ins just stop pyshark's old code path from crashing.
+class _NoOpChildWatcher:
+    def attach_loop(self, loop):
+        pass
+    def close(self):
+        pass
+
+if not hasattr(asyncio, "SafeChildWatcher"):
+    asyncio.SafeChildWatcher = _NoOpChildWatcher
+
+if not hasattr(asyncio, "set_child_watcher"):
+    def _set_child_watcher(watcher):
+        asyncio._patched_child_watcher = watcher
+    asyncio.set_child_watcher = _set_child_watcher
+
+if not hasattr(asyncio, "get_child_watcher"):
+    def _get_child_watcher():
+        return getattr(asyncio, "_patched_child_watcher", _NoOpChildWatcher())
+    asyncio.get_child_watcher = _get_child_watcher
+# --- end compatibility shim ---
+
 import pyshark
 import threading
 import subprocess
@@ -119,6 +149,12 @@ class PacketCapture:
         Captures live packets for specified duration
         """
         try:
+            try:
+                asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
             print(f"Capturing on {self.interface} for {duration}s...")
 
             capture = pyshark.LiveCapture(
