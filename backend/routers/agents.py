@@ -501,7 +501,7 @@ async def report_process_status(
     org_name = org.get('name', 'organisation')
     previous_state = org.get('agent_status', 'unknown')
 
-   db.collection('organisations').document(org_id).update({
+    db.collection('organisations').document(org_id).update({
         'agent_status': payload.actual_state,
         'agent_pid': payload.pid,
         'last_supervisor_checkin': firestore.SERVER_TIMESTAMP
@@ -513,19 +513,19 @@ async def report_process_status(
             NotificationService.create_agent_online_alert(
                 org_id=org_id,
                 agent_id=org_id,
-                org_name=org_name,
+                agent_name=org_name,
                 reconnected_at=datetime.utcnow()
             )
         elif payload.actual_state == 'stopped':
             NotificationService.create_agent_offline_alert(
                 org_id=org_id,
-                org_name=org._id,
+                agent_id=org_id,
                 agent_name=org_name,
                 last_seen=datetime.utcnow()
             )
 
     return {"status": "success"}
-
+    
 @router.put("/desired-state/{org_id}")
 async def set_desired_state(
     org_id: str,
