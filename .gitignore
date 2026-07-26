@@ -73,3 +73,8 @@ agent/build/
 agent/dist/
 *.spec
 *.envy
+
+# Packet captures — contain real network traffic, never commit
+*.pcap
+agent/captures/
+agent/.agent.pid

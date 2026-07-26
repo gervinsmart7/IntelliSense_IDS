@@ -18,7 +18,7 @@ def authenticate():
         response = requests.post(
             f"{BACKEND_URL}/api/agent/authenticate",
             json={"api_key": API_KEY},
-            timeout=30
+            timeout=120
         )
         if response.status_code == 200:
             data = response.json()['data']
@@ -143,3 +143,44 @@ def confirm_model_update(version, status):
         return response.status_code == 200
     except Exception as e:
         print(f"Update confirm error: {e}")
+
+def post_traffic_summary(benign_count, attack_count):
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/api/agent/traffic-summary",
+            json={"benign_count": benign_count, "attack_count": attack_count},
+            headers={"X-API-Key": API_KEY},
+            timeout=30
+        )
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Traffic summary post error: {e}")
+        return False
+
+def get_desired_state():
+    try:
+        response = requests.get(
+            f"{BACKEND_URL}/api/agent/desired-state",
+            headers=HEADERS,
+            timeout=30
+        )
+        if response.status_code == 200:
+            return response.json()['data']['desired_state']
+        return 'running'  # safe default if backend is briefly unreachable
+    except Exception as e:
+        print(f"Desired state fetch error: {e}")
+        return 'running'
+
+def report_process_status(actual_state, pid=None):
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/api/agent/process-status",
+            headers=HEADERS,
+            json={"actual_state": actual_state, "pid": pid},
+            timeout=30
+        )
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Process status report error: {e}")
+        return False
+

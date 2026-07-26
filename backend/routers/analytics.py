@@ -115,31 +115,18 @@ async def get_traffic(
         # Query alerts
         try:
             if org_id == 'all':
-                alerts = db.collection('alerts').get()
+                stats = db.collection('daily_traffic_stats').get()
             else:
-                alerts = db.collection('alerts').where(
-                    filter=firestore.FieldFilter(
-                        'org_id', '==', org_id
-                    )
+                stats = db.collection('daily_traffic_stats').where(
+                    filter=firestore.FieldFilter('org_id', '==', org_id)
                 ).get()
 
-            for alert in alerts:
-                data = alert.to_dict()
-                ts = data.get('timestamp')
-                if ts:
-                    try:
-                        if hasattr(ts, 'strftime'):
-                            date_key = ts.strftime('%Y-%m-%d')
-                        else:
-                            date_key = ts.date().strftime('%Y-%m-%d')
-
-                        if date_key in daily_data:
-                            if data.get('attack_type') == 'BENIGN':
-                                daily_data[date_key]['benign'] += 1
-                            else:
-                                daily_data[date_key]['attack'] += 1
-                    except Exception:
-                        pass
+            for doc in stats:
+                data = doc.to_dict()
+                date_key = data.get('date')
+                if date_key in daily_data:
+                    daily_data[date_key]['benign'] += data.get('benign', 0)
+                    daily_data[date_key]['attack'] += data.get('attack', 0)
 
         except Exception as e:
             print(f"Traffic query error: {e}")

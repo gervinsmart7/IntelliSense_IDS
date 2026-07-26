@@ -15,7 +15,6 @@ pyinstaller \
   --name intellisense-agent \
   --add-data "config:config" \
   --hidden-import pyshark \
-  --hidden-import firebase_admin \
   --hidden-import sklearn \
   --hidden-import joblib \
   --clean \

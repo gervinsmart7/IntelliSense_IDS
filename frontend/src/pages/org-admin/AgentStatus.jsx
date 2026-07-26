@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Download, Terminal, CheckCircle,
   AlertTriangle, RefreshCw, Copy,
-  Monitor, Server
+  Monitor, Server, Play, Square, Loader2
 } from 'lucide-react'
 import { orgAPI } from '../../services/api'
 import Layout from '../../components/Layout'
@@ -64,7 +64,34 @@ function AgentStatus() {
     setTimeout(function() { setCopied(null) }, 2000)
   }
 
-  const agentStatus = org?.agent_status || 'not_installed'
+  const STALE_THRESHOLD_MS = 90 * 1000 // supervisor polls every ~20s; 90s of silence = truly gone dark
+
+function computeEffectiveStatus(orgData) {
+  if (!orgData?.agent_status) return 'not_installed'
+  const lastCheckin = orgData.last_supervisor_checkin?.toDate?.()
+  if (lastCheckin && (Date.now() - lastCheckin.getTime()) > STALE_THRESHOLD_MS) {
+    return 'offline'
+  }
+  return orgData.agent_status
+}
+
+const agentStatus = computeEffectiveStatus(org)
+const desiredState = org?.desired_agent_state || 'running'
+const [updatingState, setUpdatingState] = useState(false)
+
+async function handleToggleAgent() {
+  const nextState = desiredState === 'running' ? 'stopped' : 'running'
+  setUpdatingState(true)
+  try {
+    await orgAPI.setAgentDesiredState(admin.org_id, nextState)
+    toast.success(nextState === 'running' ? 'Start requested — agent will come online shortly' : 'Stop requested — agent will go offline shortly')
+  } catch (e) {
+    toast.error('Failed to update agent state')
+  } finally {
+    setUpdatingState(false)
+  }
+}
+
   const apiKey = org?.raw_api_key_temp || 'Check your welcome email'
   const backendUrl = 'https://intellisense-ids-backend.onrender.com'
 
@@ -147,11 +174,38 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
               </div>
             </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Model Version</p>
-            <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
-              {org?.model_version || 'None deployed'}
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Model Version</p>
+              <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                {org?.model_version || 'None deployed'}
+              </p>
+            </div>
+            {agentStatus !== 'not_installed' && (
+              <button
+                onClick={handleToggleAgent}
+                disabled={updatingState}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '10px 18px', borderRadius: '8px',
+                  border: '1px solid ' + (desiredState === 'running' ? 'rgba(248,113,113,0.3)' : 'rgba(52,211,153,0.3)'),
+                  background: desiredState === 'running' ? 'rgba(248,113,113,0.1)' : 'rgba(52,211,153,0.1)',
+                  color: desiredState === 'running' ? '#F87171' : '#34D399',
+                  cursor: updatingState ? 'not-allowed' : 'pointer',
+                  fontSize: '13px', fontWeight: '600',
+                  opacity: updatingState ? 0.6 : 1
+                }}
+              >
+                {updatingState ? (
+                  <Loader2 size={14} className="spin" />
+                ) : desiredState === 'running' ? (
+                  <Square size={14} />
+                ) : (
+                  <Play size={14} />
+                )}
+                {desiredState === 'running' ? 'Stop Agent' : 'Start Agent'}
+              </button>
+            )}
           </div>
         </div>
 

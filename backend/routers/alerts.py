@@ -27,8 +27,10 @@ class CreateAlertFeedbackRequest(BaseModel):
 
 class IngestAlertRequest(BaseModel):
     alert_id: Optional[str] = None
+    event_id: Optional[str] = None
     org_id: str
     attack_type: str
+    predicted_class: Optional[str] = None
     severity: str
     src_ip: str
     dst_ip: str
@@ -41,6 +43,8 @@ class IngestAlertRequest(BaseModel):
     regulatory_flags: Optional[List[str]] = []
     is_financial_port: Optional[bool] = False
     detected_at: Optional[str] = None
+    model_version: Optional[str] = None
+    features: Optional[dict] = {}
 
 # Finance Configuration
 FINANCE_CRITICAL_PORTS = [1433, 1521, 3306, 5432, 27017, 6379]
@@ -156,6 +160,7 @@ async def ingest_alert(
             'alert_id': payload.alert_id or str(uuid.uuid4()),
             'org_id': payload.org_id,
             'attack_type': attack_type,
+            'predicted_class': payload.predicted_class or attack_type,
             'severity': severity,
             'src_ip': src_ip,
             'dst_ip': payload.dst_ip,
@@ -179,6 +184,10 @@ async def ingest_alert(
             ),
             'ip_is_tor': ip_reputation.get('is_tor', False),
             'alert_status': 'new',
+            'verification_status': 'unreviewed',
+            'verified_label': None,
+            'model_version': payload.model_version,
+            'features': payload.features or {},
             'timestamp': firestore.SERVER_TIMESTAMP
         }
 

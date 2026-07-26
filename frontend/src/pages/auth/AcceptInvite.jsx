@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { Eye, EyeOff, Shield } from 'lucide-react'
@@ -7,6 +7,7 @@ import { Eye, EyeOff, Shield } from 'lucide-react'
 function AcceptInvite() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { token: tokenParam } = useParams()
   const [token, setToken] = useState('')
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
@@ -17,9 +18,9 @@ function AcceptInvite() {
 
   useEffect(function() {
     const params = new URLSearchParams(location.search)
-    setToken(params.get('token') || '')
+    setToken(tokenParam || params.get('token') || '')
     setEmail(params.get('email') || '')
-  }, [location.search])
+  }, [location.search, tokenParam])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -79,7 +80,21 @@ function AcceptInvite() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {(!token || !email) ? (
+          <div style={{ padding: '24px', textAlign: 'center' }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              This invite link is missing required information. Please use the invitation email link again.
+            </p>
+            <button
+              onClick={function() { navigate('/login') }}
+              className="btn-primary"
+              style={{ justifyContent: 'center', width: '100%', padding: '12px' }}
+            >
+              Go to Login
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '6px' }}>
               Full Name
@@ -146,6 +161,7 @@ function AcceptInvite() {
             {loading ? 'Creating account...' : 'Create Account'}
           </button>
         </form>
+        )}
       </div>
     </div>
   )

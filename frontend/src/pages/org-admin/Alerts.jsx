@@ -1,34 +1,27 @@
 import { useState, useEffect } from 'react'
-import { AlertTriangle, Search, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, Search, X } from 'lucide-react'
 import {
   collection, onSnapshot,
-  query, orderBy, limit
+  query, orderBy, limit, where
 } from 'firebase/firestore'
 import { db } from '../../services/firebase'
-import { orgAPI } from '../../services/api'
 import Layout from '../../components/Layout'
 import TopBar from '../../components/TopBar'
 import { useNavigate } from 'react-router-dom'
-
+import useAuthStore from '../../store/useAuthStore'
 
 function Alerts() {
+  const { admin } = useAuthStore()
   const [alerts, setAlerts] = useState([])
-  const [organisations, setOrganisations] = useState([])
   const [search, setSearch] = useState('')
   const [severityFilter, setSeverityFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
- const navigate = useNavigate()
+  const navigate = useNavigate()
 
   useEffect(function() {
-    // Load organisations from API
-    orgAPI.getAll()
-      .then(function(res) {
-        setOrganisations(res.data.data || [])
-      })
-      .catch(console.error)
+    if (!admin?.org_id) return
 
-    // Load alerts from Firestore with timeout
     const timeout = setTimeout(function() {
       setLoading(false)
       if (alerts.length === 0) {
@@ -40,6 +33,7 @@ function Alerts() {
       const unsubAlerts = onSnapshot(
         query(
           collection(db, 'alerts'),
+          where('org_id', '==', admin.org_id),
           orderBy('timestamp', 'desc'),
           limit(500)
         ),
@@ -61,12 +55,12 @@ function Alerts() {
         clearTimeout(timeout)
         unsubAlerts()
       }
-    } catch(e) {
+    } catch (e) {
       clearTimeout(timeout)
       setError('Failed to connect to database')
       setLoading(false)
     }
-  }, [])
+  }, [admin?.org_id])
 
   const filtered = alerts.filter(function(a) {
     const q = search.toLowerCase()
@@ -96,7 +90,6 @@ function Alerts() {
     <Layout>
       <TopBar title="Alerts" />
 
-      {/* Severity summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
         {[
           { label: 'Critical', count: counts.critical, color: '#F87171', key: 'critical' },
@@ -111,9 +104,7 @@ function Alerts() {
               onClick={function() { setSeverityFilter(item.key) }}
               style={{
                 cursor: 'pointer',
-                borderColor: severityFilter === item.key
-                  ? item.color
-                  : 'var(--border)'
+                borderColor: severityFilter === item.key ? item.color : 'var(--border)'
               }}
             >
               <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '8px' }}>
@@ -128,7 +119,6 @@ function Alerts() {
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        {/* Toolbar */}
         <div style={{
           padding: '16px 20px',
           borderBottom: '1px solid var(--border)',
@@ -176,7 +166,6 @@ function Alerts() {
           </div>
         </div>
 
-        {/* Content */}
         {loading ? (
           <div style={{ padding: '64px', textAlign: 'center' }}>
             <div style={{
@@ -187,15 +176,11 @@ function Alerts() {
               animation: 'spin 0.8s linear infinite',
               margin: '0 auto 16px'
             }} />
-            <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-              Loading alerts...
-            </p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Loading alerts...</p>
           </div>
         ) : error ? (
           <div style={{ padding: '64px', textAlign: 'center' }}>
-            <p style={{ color: 'var(--danger)', fontSize: '14px', marginBottom: '8px' }}>
-              {error}
-            </p>
+            <p style={{ color: 'var(--danger)', fontSize: '14px', marginBottom: '8px' }}>{error}</p>
             <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '16px' }}>
               Check your Firestore rules and indexes
             </p>
@@ -206,8 +191,7 @@ function Alerts() {
             <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
               {search || severityFilter !== 'all'
                 ? 'No alerts match your filters'
-                : 'No alerts yet — network is clean'
-              }
+                : 'No alerts yet — network is clean'}
             </p>
           </div>
         ) : (
@@ -216,7 +200,6 @@ function Alerts() {
               <thead>
                 <tr>
                   <th>Time</th>
-                  <th>Organisation</th>
                   <th>Attack Type</th>
                   <th>Severity</th>
                   <th>Source IP</th>
@@ -227,23 +210,14 @@ function Alerts() {
               </thead>
               <tbody>
                 {filtered.slice(0, 100).map(function(alert) {
-                  const org = organisations.find(function(o) {
-                    return o.org_id === alert.org_id
-                  })
-                 
-
-		 return (
-                    <tr key={alert.id}
-		onClick={function() { navigate('/dashboard/super/alerts/' + alert.id) }}
-                style={{ cursor: 'pointer' }}
-	   >
+                  return (
+                    <tr
+                      key={alert.id}
+                      onClick={function() { navigate('/dashboard/organisation/alerts/' + alert.id) }}
+                      style={{ cursor: 'pointer' }}
+                    >
                       <td style={{ fontSize: '12px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {alert.timestamp?.toDate?.()?.toLocaleString() || 'Just now'}
-                      </td>
-                      <td>
-                        <span className="badge badge-accent">
-                          {org?.org_code || '—'}
-                        </span>
                       </td>
                       <td style={{ fontSize: '13px', fontWeight: '500' }}>
                         {alert.attack_type}

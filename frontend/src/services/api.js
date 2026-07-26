@@ -95,7 +95,9 @@ export const orgAPI = {
   delete: (orgId) =>
     api.delete('/api/organisations/' + orgId),
   regenerateKey: (orgId) =>
-    api.post('/api/organisations/' + orgId + '/regenerate-key')
+    api.post('/api/organisations/' + orgId + '/regenerate-key'),
+  setAgentDesiredState: (orgId, desiredState) =>
+    api.put('/api/agent/desired-state/' + orgId, { desired_state: desiredState })
 }
 
 export const modelAPI = {

@@ -63,6 +63,8 @@ class TrafficClassifier:
             result_df = df.copy()
             result_df['prediction'] = labels
             result_df['confidence'] = confidence
+            result_df['is_intrusion'] = [str(l).upper() != 'BENIGN' for l in labels]
+            result_df['model_version'] = self.current_version
 
             benign = int((labels == 'BENIGN').sum())
             attacks = int((labels != 'BENIGN').sum())

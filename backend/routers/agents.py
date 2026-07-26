@@ -10,6 +10,8 @@ import hashlib
 import tempfile
 import os
 from datetime import datetime
+from pydantic import BaseModel
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/agent", tags=["Agent"])
 db = get_db()
@@ -209,6 +211,35 @@ async def agent_heartbeat(
         "data": response_data
     }
 
+class TrafficSummaryRequest(BaseModel):
+    benign_count: int
+    attack_count: int
+
+@router.post("/traffic-summary")
+async def post_traffic_summary(
+    payload: TrafficSummaryRequest,
+    org: dict = Depends(get_agent_org)
+):
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    doc_id = f"{org['org_id']}_{today}"
+
+    doc_ref = db.collection('daily_traffic_stats').document(doc_id)
+    doc = doc_ref.get()
+
+    if doc.exists:
+        doc_ref.update({
+            'benign': firestore.Increment(payload.benign_count),
+            'attack': firestore.Increment(payload.attack_count)
+        })
+    else:
+        doc_ref.set({
+            'org_id': org['org_id'],
+            'date': today,
+            'benign': payload.benign_count,
+            'attack': payload.attack_count
+        })
+
+    return {"status": "success"}
 
 @router.post("/logs/upload")
 async def upload_logs(
@@ -377,7 +408,7 @@ async def get_agent_status(
     return {
         "status": "success",
         "data": {
-            "agent_status": data.get('agent_status'),
+            "agent_status": get_effective_agent_status(data),
             "model_version": data.get('model_version'),
             "last_seen": data.get('last_seen'),
             "last_sync": data.get('last_sync'),
@@ -385,6 +416,13 @@ async def get_agent_status(
             "update_status": data.get('update_status')
         }
     }
+STALE_THRESHOLD_SECONDS = 90  # supervisor should poll well under this
+
+def get_effective_agent_status(org_data):
+    last_checkin = org_data.get('last_supervisor_checkin')
+    if last_checkin and (datetime.now(timezone.utc) - last_checkin).total_seconds() > STALE_THRESHOLD_SECONDS:
+        return 'offline'
+    return org_data.get('agent_status', 'offline')
 
 @router.get("/download/info")
 async def get_agent_download_info(
@@ -426,3 +464,87 @@ async def get_agent_download_info(
             }
         }
     }
+
+class ProcessStatusRequest(BaseModel):
+    actual_state: str  # 'running' | 'stopped'
+    pid: Optional[int] = None
+
+class DesiredStateRequest(BaseModel):
+    desired_state: str  # 'running' | 'stopped'
+
+@router.get("/desired-state")
+async def get_desired_state(org: dict = Depends(get_agent_org)):
+    """
+    Polled by the agent's supervisor to know whether main.py
+    should be running or stopped right now.
+    """
+    return {
+        "status": "success",
+        "data": {
+            "desired_state": org.get('desired_agent_state', 'running')
+        }
+    }
+
+
+@router.post("/process-status")
+async def report_process_status(
+    payload: ProcessStatusRequest,
+    org: dict = Depends(get_agent_org)
+):
+    """
+    Called by the supervisor every poll cycle to report the REAL,
+    observed state of main.py — this is the only truthful source
+    for agent_status, since the supervisor is the only thing that's
+    always alive to actually check.
+    """
+    org_id = org['org_id']
+    org_name = org.get('name', 'organisation')
+    previous_state = org.get('agent_status', 'unknown')
+
+   db.collection('organisations').document(org_id).update({
+        'agent_status': payload.actual_state,
+        'agent_pid': payload.pid,
+        'last_supervisor_checkin': firestore.SERVER_TIMESTAMP
+    })
+
+    if previous_state != payload.actual_state and previous_state != 'unknown':
+        from services.notifications import NotificationService
+        if payload.actual_state == 'running':
+            NotificationService.create_agent_online_alert(
+                org_id=org_id,
+                agent_id=org_id,
+                org_name=org_name,
+                reconnected_at=datetime.utcnow()
+            )
+        elif payload.actual_state == 'stopped':
+            NotificationService.create_agent_offline_alert(
+                org_id=org_id,
+                org_name=org._id,
+                agent_name=org_name,
+                last_seen=datetime.utcnow()
+            )
+
+    return {"status": "success"}
+
+@router.put("/desired-state/{org_id}")
+async def set_desired_state(
+    org_id: str,
+    payload: DesiredStateRequest,
+    current_admin: dict = Depends(get_current_admin)
+):
+    """
+    Called by the dashboard's Start/Stop button. Only sets INTENT —
+    the actual state change happens when the org's supervisor next
+    polls and acts on it.
+    """
+    if payload.desired_state not in ('running', 'stopped'):
+        raise HTTPException(status_code=400, detail="Invalid desired_state")
+
+    if current_admin['role'] == 'org_admin' and current_admin['org_id'] != org_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    db.collection('organisations').document(org_id).update({
+        'desired_agent_state': payload.desired_state
+    })
+
+    return {"status": "success", "message": f"Desired state set to {payload.desired_state}"}

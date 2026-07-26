@@ -11,71 +11,49 @@ class FeatureExtractor:
 
     def extract_features(self, pcap_file):
         """
-        Uses pure Python cicflowmeter
-        No Java required
-        Works inside PyInstaller bundle
+        Uses the cicflowmeter CLI tool (via subprocess) to convert
+        a pcap into a flow-feature CSV. Falls back to manual
+        extraction if cicflowmeter fails or produces no output.
         """
         try:
             print(f"Extracting features from {pcap_file}...")
 
-            # Output CSV path
+            import subprocess
+            classic_pcap = pcap_file.replace('.pcap', '_classic.pcap')
+            convert_result = subprocess.run(
+                ['editcap', '-F', 'pcap', pcap_file, classic_pcap],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+
+            if not os.path.exists(classic_pcap):
+                print(f"editcap conversion failed: {convert_result.stderr}")
+                return self._fallback_extraction(pcap_file)
+
             output_csv = os.path.join(
-                self.flows_dir,
+                self.flows_dir, 
                 os.path.basename(pcap_file).replace('.pcap', '.csv')
             )
 
-            # Use cicflowmeter Python library
-            from cicflowmeter.flow_session import generate_session_class
-            from scapy.all import sniff, PcapReader
+            result = subprocess.run(
+                ['cicflowmeter', '-f', pcap_file, '-c', output_csv],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
 
-            flows = []
+            os.remove(classic_pcap)
 
-            # Read pcap and extract flows
-            try:
-                with PcapReader(pcap_file) as reader:
-                    for packet in reader:
-                        flows.append(packet)
-            except Exception as e:
-                print(f"PCAP read error: {e}")
-                return None
-
-            if not flows:
-                print("No packets in capture")
-                return None
-
-            # Create flow session and process
-            try:
-                from cicflowmeter.flow_session import generate_session_class
-                from scapy.all import PcapReader
-                import subprocess
-
-                # Use cicflowmeter CLI
-                result = subprocess.run(
-                    [
-                        'cicflowmeter',
-                        '-f', pcap_file,
-                        '-c', self.flows_dir
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=120
-                )
-
-                csv_files = glob.glob(
-                    os.path.join(self.flows_dir, '*.csv')
-                )
-
-                if csv_files:
-                    latest = max(csv_files, key=os.path.getctime)
-                    print(f"Features extracted: {latest}")
-                    return latest
-
-            except Exception as e:
-                print(f"CICFlowMeter error: {e}")
-                return self._fallback_extraction(pcap_file)
+            if os.path.exists(output_csv) and os.path.getsize(output_csv) > 0:
+               print(f"Features extracted: {output_csv}")
+               return output_csv
+        
+            print(f"CICFlowMeter produced no output. stderr: {result.stderr}")
+            return self._fallback_extraction(pcap_file)
 
         except Exception as e:
-            print(f"Feature extraction error: {e}")
+            print(f"CICFlowMeter error: {e}")
             return self._fallback_extraction(pcap_file)
 
     def _fallback_extraction(self, pcap_file):
@@ -283,16 +261,16 @@ class FeatureExtractor:
 
     def align_to_model_schema(self, df, feature_names):
         """
-        trained schema, and forces the exact fit-time order.
         Renames/duplicates columns to match the partner's
+        trained schema, and forces the exact fit-time order.
         """
         df = df.rename(columns={'Dst Port': 'Destination Port'})
-    
+
         if 'Fwd Header Length' in df.columns and 'Fwd Header Length.1' not in df.columns:
             df['Fwd Header Length.1'] = df['Fwd Header Length']
-    
+
         missing = [f for f in feature_names if f not in df.columns]
         if missing:
             raise ValueError(f"Missing required features: {missing}")
-    
+
         return df[list(feature_names)]

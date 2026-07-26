@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { useEffect } from 'react'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -11,6 +11,7 @@ import SuperDashboard from './pages/super-admin/SuperDashboard'
 import Organisations from './pages/super-admin/Organisations'
 import ModelManagement from './pages/super-admin/ModelManagement'
 import Alerts from './pages/super-admin/Alerts'
+import OrgAlerts from './pages/org-admin/Alerts'
 import AuditLogs from './pages/super-admin/AuditLogs'
 import SystemConfig from './pages/super-admin/SystemConfig'
 import AdminManagement from './pages/super-admin/AdminManagement'
@@ -26,6 +27,7 @@ import Reports from './pages/org-admin/Reports'
 import AccountSettings from './pages/org-admin/AccountSettings'
 import ActivityHistory from './pages/org-admin/ActivityHistory'
 import Notifications from './pages/org-admin/Notifications'
+import Logs from './pages/org-admin/Logs'
 import AlertDetail from './pages/shared/AlertDetail'
 import Layout from './components/Layout'
 import useAuthStore from './store/useAuthStore'
@@ -69,6 +71,22 @@ function RootRedirect() {
   return <Navigate to="/dashboard/organisation" replace />
 }
 
+function LoginRoute() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const token = params.get('token')
+    const email = params.get('email')
+    if (token && email) {
+      navigate(`/accept-invite?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`, { replace: true })
+    }
+  }, [location.search, navigate])
+
+  return <Login />
+}
+
 function App() {
   const { isAuthenticated, role } = useAuthStore()
   const { initTheme } = useThemeStore()
@@ -93,11 +111,12 @@ function App() {
       />
       <Routes>
         <Route path="/" element={<RootRedirect />} />
-        <Route path="/login" element={isAuthenticated ? <RootRedirect /> : <Login />} />
+        <Route path="/login" element={isAuthenticated ? <RootRedirect /> : <LoginRoute />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-account" element={<VerifyEmail />} />
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
         <Route path="/accept-invite" element={<AcceptInvite />} />
+        <Route path="/accept-invite/:token" element={<AcceptInvite />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/unauthorised" element={<Unauthorised />} />
 
@@ -130,9 +149,9 @@ function App() {
 
         {/* Org Admin */}
         <Route path="/dashboard/organisation" element={<ProtectedRoute allowedRoles={['org_admin']}><OrgDashboard /></ProtectedRoute>} />
-        <Route path="/dashboard/organisation/alerts" element={<ProtectedRoute allowedRoles={['org_admin']}><Alerts /></ProtectedRoute>} />
+        <Route path="/dashboard/organisation/alerts" element={<ProtectedRoute allowedRoles={['org_admin']}><OrgAlerts /></ProtectedRoute>} />
         <Route path="/dashboard/organisation/alerts/:alertId" element={<ProtectedRoute allowedRoles={['org_admin']}><AlertDetail /></ProtectedRoute>} />
-        <Route path="/dashboard/organisation/logs" element={<ProtectedRoute allowedRoles={['org_admin']}><LogsViewer /></ProtectedRoute>} />
+        <Route path="/dashboard/organisation/logs" element={<ProtectedRoute allowedRoles={['org_admin']}><Logs /></ProtectedRoute>} />
         <Route path="/dashboard/organisation/agent" element={<ProtectedRoute allowedRoles={['org_admin']}><AgentStatus /></ProtectedRoute>} />
         <Route path="/dashboard/organisation/activity" element={<ProtectedRoute allowedRoles={['org_admin']}><ActivityHistory /></ProtectedRoute>} />
         <Route path="/dashboard/organisation/notifications" element={<ProtectedRoute allowedRoles={["org_admin"]}><Notifications /></ProtectedRoute>} />

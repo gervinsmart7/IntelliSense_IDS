@@ -32,7 +32,7 @@ import pyshark
 import threading
 import subprocess
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from config.settings import (
     NETWORK_INTERFACE,
     CAPTURE_INTERVAL,
@@ -146,28 +146,49 @@ class PacketCapture:
 
     def capture_live(self, duration, output_file):
         """
-        Captures live packets for specified duration
+        Captures live packets for specified duration by calling
+        tshark directly via subprocess. Bypasses pyshark.LiveCapture,
+        whose sniff(timeout=...) does not reliably honor the requested
+        duration when writing to a file (confirmed via direct testing).
         """
         try:
-            try:
-                asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
             print(f"Capturing on {self.interface} for {duration}s...")
 
-            capture = pyshark.LiveCapture(
-                interface=self.interface,
-                output_file=output_file
+            result = subprocess.run(
+                [
+                    'tshark',
+                    '-i', self.interface,
+                    '-a', f'duration:{duration}',
+                    '-w', output_file
+                ],
+                capture_output=True,
+                text=True,
+                timeout=duration + 15  # hard safety margin beyond tshark's own timer
             )
 
-            capture.sniff(timeout=duration)
-            self.packets_captured = len(capture)
+            if not os.path.exists(output_file):
+                print(f"Capture error: no output file created. stderr: {result.stderr}")
+                return None
+
+            try:
+                count_result = subprocess.run(
+                    ['tshark', '-r', output_file],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                self.packets_captured = len(
+                    [l for l in count_result.stdout.strip().split('\n') if l]
+                )
+            except Exception:
+                self.packets_captured = 0
 
             print(f"Captured {self.packets_captured} packets")
             return output_file
 
+        except subprocess.TimeoutExpired:
+            print("Capture error: tshark did not exit in time")
+            return None
         except Exception as e:
             print(f"Capture error: {e}")
             return None
@@ -180,7 +201,7 @@ class PacketCapture:
 
         def capture_loop():
             while self.is_running:
-                timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
                 output_file = os.path.join(
                     CAPTURE_DIR,
                     f"capture_{timestamp}.pcap"

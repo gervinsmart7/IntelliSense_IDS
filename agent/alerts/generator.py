@@ -1,6 +1,5 @@
-import uuid
 from __future__ import annotations
-
+import uuid
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -85,7 +84,7 @@ class AlertGenerator:
                 src_port = int(float(flow.get("Src Port", flow.get("src_port", 0)) or 0))
                 severity = self.get_finance_severity(attack_type, dst_port)
                 alert = {
-                    "alert_id": str(flow.get("event_id") or ""),
+                    "alert_id": str(uuid.uuid4()),
                     "event_id": str(flow.get("event_id") or ""),
                     "org_id": self.org_id,
                     "attack_type": attack_type,
@@ -107,6 +106,11 @@ class AlertGenerator:
                     "verified_label": None,
                     "model_version": str(flow.get("model_version", "unknown")),
                     "detected_at": datetime.now(timezone.utc).isoformat(),
+                    "features": {
+                        k: (float(v) if isinstance(v, (int, float)) else str(v))
+                        for k, v in flow.items()
+                        if k not in ("prediction", "confidence", "is_intrusion")
+                    },
                 }
                 if post_alert(alert):
                     sent += 1
