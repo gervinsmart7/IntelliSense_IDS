@@ -122,7 +122,7 @@ async def authenticate_agent(
         )
 
     # Update agent status to online
-     db.collection('organisations').document(org['org_id']).update({
+    db.collection('organisations').document(org['org_id']).update({
         'agent_ip': request.client.host,
         'last_seen': firestore.SERVER_TIMESTAMP
     })
