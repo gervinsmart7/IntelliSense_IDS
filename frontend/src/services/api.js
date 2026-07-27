@@ -97,7 +97,9 @@ export const orgAPI = {
   regenerateKey: (orgId) =>
     api.post('/api/organisations/' + orgId + '/regenerate-key'),
   setAgentDesiredState: (orgId, desiredState) =>
-    api.put('/api/agent/desired-state/' + orgId, { desired_state: desiredState })
+    api.put('/api/agent/desired-state/' + orgId, { desired_state: desiredState }),
+  getAgentStatus: (orgId) =>
+    api.get('/api/organisations/' + orgId + '/agent-status')
 }
 
 export const modelAPI = {

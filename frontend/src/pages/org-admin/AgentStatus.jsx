@@ -9,11 +9,6 @@ import Layout from '../../components/Layout'
 import TopBar from '../../components/TopBar'
 import useAuthStore from '../../store/useAuthStore'
 import toast from 'react-hot-toast'
-import {
-  collection, query, where,
-  onSnapshot
-} from 'firebase/firestore'
-import { db } from '../../services/firebase'
 
 function AgentStatus() {
   const { admin } = useAuthStore()
@@ -27,18 +22,19 @@ function AgentStatus() {
 
   useEffect(function() {
     if (!admin?.org_id) return
-    const unsub = onSnapshot(
-      query(
-        collection(db, 'organisations'),
-        where('org_id', '==', admin.org_id)
-      ),
-      function(snap) {
-        if (!snap.empty) {
-          setOrg({ id: snap.docs[0].id, ...snap.docs[0].data() })
-        }
+
+    async function fetchStatus() {
+      try {
+        const res = await orgAPI.getAgentStatus(admin.org_id)
+        setOrg(res.data.data)
+      } catch (e) {
+        console.error('Agent status fetch error:', e)
       }
-    )
-    return unsub
+    }
+
+    fetchStatus()
+    const interval = setInterval(fetchStatus, 15000)
+    return function() { clearInterval(interval) }
   }, [admin?.org_id])
 
   async function handleRegenerateKey() {
@@ -65,23 +61,10 @@ function AgentStatus() {
     setTimeout(function() { setCopied(null) }, 2000)
   }
 
-  // Staleness threshold: the supervisor polls roughly every 20s,
-  // so if we haven't heard from it in well over that, treat the
-  // agent as offline even if the last reported value said online —
-  // this covers the case where the whole machine (supervisor
-  // included) has gone dark, not just main.py.
-  const STALE_THRESHOLD_MS = 90 * 1000
-
-  function computeEffectiveStatus(orgData) {
-    if (!orgData?.agent_status && !orgData?.last_seen) return 'not_installed'
-    const lastCheckin = orgData?.last_supervisor_checkin?.toDate?.()
-    if (lastCheckin && (Date.now() - lastCheckin.getTime()) > STALE_THRESHOLD_MS) {
-      return 'offline'
-    }
-    return orgData?.agent_status || 'offline'
-  }
-
-  const agentStatus = computeEffectiveStatus(org)
+  // agent_status already reflects staleness-aware server-side logic
+  // (get_effective_agent_status) — no client-side recomputation here,
+  // to avoid two independent implementations disagreeing with each other.
+  const agentStatus = org?.agent_status || (org?.last_seen ? 'offline' : 'not_installed')
   const desiredState = org?.desired_agent_state || 'running'
 
   async function handleToggleAgent() {
@@ -164,7 +147,6 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
     <Layout>
       <TopBar title="Agent Status" />
 
-      {/* Status Card */}
       <div className="card" style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -224,7 +206,7 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
             {[
               { label: 'Flows Captured', value: (org?.flows_captured || 0).toLocaleString() },
               { label: 'Flows Uploaded', value: (org?.flows_uploaded || 0).toLocaleString() },
-              { label: 'Last Heartbeat', value: org?.last_seen?.toDate?.()?.toLocaleTimeString() || 'Just now' }
+              { label: 'Last Heartbeat', value: org?.last_seen?.toDate?.()?.toLocaleTimeString?.() || 'Just now' }
             ].map(function(stat) {
               return (
                 <div key={stat.label} style={{ padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: '8px', textAlign: 'center' }}>
@@ -237,7 +219,6 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
         )}
       </div>
 
-      {/* Install Guide — only when truly never installed */}
       {agentStatus === 'not_installed' && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
@@ -253,7 +234,6 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
             </p>
           </div>
 
-          {/* OS Selector */}
           <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
             {[
               { key: 'linux', label: 'Linux', icon: Server },
@@ -281,7 +261,6 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
             })}
           </div>
 
-          {/* Steps */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {steps.map(function(step, i) {
               return (
@@ -315,7 +294,6 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
             })}
           </div>
 
-          {/* API Key reminder */}
           <div style={{ marginTop: '24px', padding: '14px 18px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)', borderRadius: '10px' }}>
             <p style={{ fontSize: '12px', color: 'var(--warning)', fontWeight: '600', marginBottom: '6px' }}>
               ⚠️ Your API Key
@@ -338,7 +316,6 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
         </div>
       )}
 
-      {/* Offline — installed before, just not reporting in right now */}
       {agentStatus === 'offline' && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
@@ -355,7 +332,7 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
             <div style={{ padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: '8px' }}>
               <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Seen</p>
               <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                {org?.last_seen?.toDate?.()?.toLocaleString() || 'Unknown'}
+                {org?.last_seen?.toDate?.()?.toLocaleString?.() || 'Unknown'}
               </p>
             </div>
             <div style={{ padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: '8px' }}>
