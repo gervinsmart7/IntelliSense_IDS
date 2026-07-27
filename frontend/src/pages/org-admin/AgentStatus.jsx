@@ -23,6 +23,7 @@ function AgentStatus() {
   const [showKey, setShowKey] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   const [selectedOS, setSelectedOS] = useState('linux')
+  const [updatingState, setUpdatingState] = useState(false)
 
   useEffect(function() {
     if (!admin?.org_id) return
@@ -64,33 +65,41 @@ function AgentStatus() {
     setTimeout(function() { setCopied(null) }, 2000)
   }
 
-  const STALE_THRESHOLD_MS = 90 * 1000 // supervisor polls every ~20s; 90s of silence = truly gone dark
+  // Staleness threshold: the supervisor polls roughly every 20s,
+  // so if we haven't heard from it in well over that, treat the
+  // agent as offline even if the last reported value said online —
+  // this covers the case where the whole machine (supervisor
+  // included) has gone dark, not just main.py.
+  const STALE_THRESHOLD_MS = 90 * 1000
 
-function computeEffectiveStatus(orgData) {
-  if (!orgData?.agent_status) return 'not_installed'
-  const lastCheckin = orgData.last_supervisor_checkin?.toDate?.()
-  if (lastCheckin && (Date.now() - lastCheckin.getTime()) > STALE_THRESHOLD_MS) {
-    return 'offline'
+  function computeEffectiveStatus(orgData) {
+    if (!orgData?.agent_status && !orgData?.last_seen) return 'not_installed'
+    const lastCheckin = orgData?.last_supervisor_checkin?.toDate?.()
+    if (lastCheckin && (Date.now() - lastCheckin.getTime()) > STALE_THRESHOLD_MS) {
+      return 'offline'
+    }
+    return orgData?.agent_status || 'offline'
   }
-  return orgData.agent_status
-}
 
-const agentStatus = computeEffectiveStatus(org)
-const desiredState = org?.desired_agent_state || 'running'
-const [updatingState, setUpdatingState] = useState(false)
+  const agentStatus = computeEffectiveStatus(org)
+  const desiredState = org?.desired_agent_state || 'running'
 
-async function handleToggleAgent() {
-  const nextState = desiredState === 'running' ? 'stopped' : 'running'
-  setUpdatingState(true)
-  try {
-    await orgAPI.setAgentDesiredState(admin.org_id, nextState)
-    toast.success(nextState === 'running' ? 'Start requested — agent will come online shortly' : 'Stop requested — agent will go offline shortly')
-  } catch (e) {
-    toast.error('Failed to update agent state')
-  } finally {
-    setUpdatingState(false)
+  async function handleToggleAgent() {
+    const nextState = desiredState === 'running' ? 'stopped' : 'running'
+    setUpdatingState(true)
+    try {
+      await orgAPI.setAgentDesiredState(admin.org_id, nextState)
+      toast.success(
+        nextState === 'running'
+          ? 'Start requested — agent will come online shortly'
+          : 'Stop requested — agent will go offline shortly'
+      )
+    } catch (e) {
+      toast.error('Failed to update agent state')
+    } finally {
+      setUpdatingState(false)
+    }
   }
-}
 
   const apiKey = org?.raw_api_key_temp || 'Check your welcome email'
   const backendUrl = 'https://intellisense-ids-backend.onrender.com'
@@ -174,6 +183,7 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
               </div>
             </div>
           </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Model Version</p>
@@ -227,8 +237,8 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
         )}
       </div>
 
-      {/* Install Guide */}
-      {agentStatus !== 'online' && (
+      {/* Install Guide — only when truly never installed */}
+      {agentStatus === 'not_installed' && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
             <Download size={16} color="var(--accent)" />
@@ -323,6 +333,36 @@ ORG_ID=${admin?.org_id || 'your-org-id'}
               >
                 {copied === 'apikey' ? <CheckCircle size={14} /> : <Copy size={14} />}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Offline — installed before, just not reporting in right now */}
+      {agentStatus === 'offline' && (
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <AlertTriangle size={16} color="var(--danger)" />
+            <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+              Agent Currently Offline
+            </p>
+          </div>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '16px' }}>
+            The agent was previously installed and connected, but isn't reporting in right now.
+            This can happen if it was stopped, the host machine is off, or there's a network issue.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+            <div style={{ padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: '8px' }}>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Seen</p>
+              <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                {org?.last_seen?.toDate?.()?.toLocaleString() || 'Unknown'}
+              </p>
+            </div>
+            <div style={{ padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: '8px' }}>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Model Version</p>
+              <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                {org?.model_version || 'Unknown'}
+              </p>
             </div>
           </div>
         </div>

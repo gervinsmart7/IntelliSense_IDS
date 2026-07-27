@@ -96,7 +96,7 @@ def run():
                 stop_agent(current_pid)
                 current_pid = None
 
-            actual_state = 'running' if current_pid is not None else 'stopped'
+            actual_state = 'online' if current_pid is not None else 'offline'
             report_process_status(actual_state, current_pid)
 
         except Exception as e:

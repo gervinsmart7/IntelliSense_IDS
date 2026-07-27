@@ -160,36 +160,22 @@ async def authenticate_agent(
         }
     }
 
-
 @router.post("/heartbeat")
 async def agent_heartbeat(
     payload: HeartbeatRequest,
     request: Request,
     org: dict = Depends(get_agent_org)
 ):
-    org_fresh = db.collection('organisations')\
-                  .document(org['org_id']).get().to_dict()
-
-    previous_status = org_fresh.get('agent_status')
-
+    # agent_status is now owned exclusively by the supervisor's
+    # /process-status endpoint — only it can truthfully report
+    # online vs offline, since it's the only thing still alive
+    # when main.py itself is stopped or crashed.
     db.collection('organisations').document(org['org_id']).update({
-        'agent_status': payload.status,
         'model_version': payload.model_version,
         'last_seen': firestore.SERVER_TIMESTAMP,
         'flows_captured': payload.flows_captured,
         'flows_uploaded': payload.flows_uploaded
     })
-
-    # If agent was offline and is now reporting online, fire reconnect notification
-    if previous_status == 'offline' and payload.status == 'online':
-        try:
-            NotificationService.create_agent_online_alert(
-                org_id=org['org_id'],
-                agent_id=org['org_id'],
-                agent_name=org['name']
-            )
-        except Exception:
-            pass
 
     org_fresh = db.collection('organisations')\
                   .document(org['org_id']).get().to_dict()
@@ -486,7 +472,6 @@ async def get_desired_state(org: dict = Depends(get_agent_org)):
         }
     }
 
-
 @router.post("/process-status")
 async def report_process_status(
     payload: ProcessStatusRequest,
@@ -509,14 +494,14 @@ async def report_process_status(
     })
 
     if previous_state != payload.actual_state and previous_state != 'unknown':
-        if payload.actual_state == 'running':
+        if payload.actual_state == 'online':
             NotificationService.create_agent_online_alert(
                 org_id=org_id,
                 agent_id=org_id,
                 agent_name=org_name,
                 reconnected_at=datetime.utcnow()
             )
-        elif payload.actual_state == 'stopped':
+        elif payload.actual_state == 'offline':
             NotificationService.create_agent_offline_alert(
                 org_id=org_id,
                 agent_id=org_id,
