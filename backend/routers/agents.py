@@ -3,6 +3,7 @@ from firebase_admin import firestore
 from services.firebase import get_db
 from services.audit import log_action
 from services.notifications import NotificationService
+from services.auth import get_current_admin
 from services.s3 import upload_file, generate_presigned_url
 from pydantic import BaseModel
 from typing import Optional
@@ -508,7 +509,6 @@ async def report_process_status(
     })
 
     if previous_state != payload.actual_state and previous_state != 'unknown':
-        from services.notifications import NotificationService
         if payload.actual_state == 'running':
             NotificationService.create_agent_online_alert(
                 org_id=org_id,
@@ -525,7 +525,7 @@ async def report_process_status(
             )
 
     return {"status": "success"}
-    
+
 @router.put("/desired-state/{org_id}")
 async def set_desired_state(
     org_id: str,
