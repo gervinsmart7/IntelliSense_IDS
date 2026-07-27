@@ -122,20 +122,10 @@ async def authenticate_agent(
         )
 
     # Update agent status to online
-    db.collection('organisations').document(org['org_id']).update({
-        'agent_status': 'online',
+     db.collection('organisations').document(org['org_id']).update({
         'agent_ip': request.client.host,
         'last_seen': firestore.SERVER_TIMESTAMP
     })
-
-    try:
-        NotificationService.create_agent_online_alert(
-            org_id=org['org_id'],
-            agent_id=org['org_id'],
-            agent_name=org['name']
-        )
-    except Exception:
-        pass
 
     log_action(
         admin_id='agent',
@@ -144,9 +134,7 @@ async def authenticate_agent(
         action_type='AGENT_AUTHENTICATED',
         action_detail=f"Agent authenticated for {org['name']} ({org['org_code']})",
         ip_address=request.client.host,
-        target_org_id=org['org_id'],
-        target_org_code=org['org_code'],
-        status='success'
+       
     )
 
     return {
