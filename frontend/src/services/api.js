@@ -153,4 +153,17 @@ export const alertsAPI = {
     })
 }
 
+export const logsAPI = {
+  getSummary: (orgId, days = 7) =>
+    api.get('/api/logs/summary/' + orgId, { params: { days } }),
+  getSummaryAll: (days = 7) =>
+    api.get('/api/logs/summary/all', { params: { days } }),
+  getRaw: (orgId, page = 0, pageSize = 50) =>
+    api.get('/api/logs/raw/' + orgId, { params: { page, page_size: pageSize } })
+  getRaw: (orgId, page = 0, pageSize = 50) =>
+    api.get('/api/logs/raw/' + orgId, { params: { page, page_size: pageSize } }),
+  getRawAll: (page = 0, pageSize = 50) =>
+    api.get('/api/logs/raw/all', { params: { page, page_size: pageSize } })
+}
+
 export default api

@@ -59,7 +59,7 @@ function SystemHealth() {
       name: 'Backend API',
       icon: Server,
       status: health?.api || 'checking',
-      description: 'FastAPI server on EC2',
+      description: 'FastAPI server on Render',
       detail: health?.api === 'healthy' ? 'All endpoints responding' : 'Connection error'
     },
     {
