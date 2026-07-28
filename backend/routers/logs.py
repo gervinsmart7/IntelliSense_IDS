@@ -112,3 +112,37 @@ async def get_raw_logs(
         "page_size": page_size,
         "has_more": len(all_rows) > end
     }
+
+@router.get("/summary/all")
+async def get_all_orgs_logs_summary(
+    days: int = 7,
+    current_admin: dict = Depends(get_current_admin)
+):
+    if current_admin['role'] not in ('super_admin', 'platform_admin'):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    stats = db.collection('daily_traffic_stats').get()
+    daily = [s.to_dict() for s in stats]
+
+    # Group by org_id so the frontend can show per-org breakdown too
+    by_org = {}
+    total_benign = 0
+    total_attack = 0
+
+    for d in daily:
+        org_id = d.get('org_id')
+        by_org.setdefault(org_id, {'benign': 0, 'attack': 0})
+        by_org[org_id]['benign'] += d.get('benign', 0)
+        by_org[org_id]['attack'] += d.get('attack', 0)
+        total_benign += d.get('benign', 0)
+        total_attack += d.get('attack', 0)
+
+    return {
+        "status": "success",
+        "data": {
+            "total_flows": total_benign + total_attack,
+            "total_benign": total_benign,
+            "total_attack": total_attack,
+            "by_org": by_org
+        }
+    }
