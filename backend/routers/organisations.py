@@ -744,3 +744,44 @@ async def regenerate_api_key(
         ),
         "data": {"api_key": raw_api_key}
     }
+
+@router.get("/{org_id}/agent-status")
+async def get_org_agent_status(
+    org_id: str,
+    current_admin: dict = Depends(get_current_admin)
+):
+    """
+    Admin-facing agent status endpoint — used by the dashboard's
+    Agent page. Distinct from /api/agent/status/{org_id}, which
+    requires the agent's own API key and can't be called from
+    a logged-in admin's browser session.
+    """
+    if current_admin['role'] == 'org_admin' and current_admin['org_id'] != org_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    org_doc = db.collection('organisations').document(org_id).get()
+    if not org_doc.exists:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+
+    data = org_doc.to_dict()
+
+    STALE_THRESHOLD_SECONDS = 90
+    from datetime import timezone
+    last_checkin = data.get('last_supervisor_checkin')
+    if last_checkin and (datetime.now(timezone.utc) - last_checkin).total_seconds() > STALE_THRESHOLD_SECONDS:
+        effective_status = 'offline'
+    else:
+        effective_status = data.get('agent_status', 'offline')
+
+    return {
+        "status": "success",
+        "data": {
+            "agent_status": effective_status,
+            "model_version": data.get('model_version'),
+            "last_seen": data.get('last_seen'),
+            "flows_captured": data.get('flows_captured'),
+            "flows_uploaded": data.get('flows_uploaded'),
+            "desired_agent_state": data.get('desired_agent_state', 'running'),
+            "raw_api_key_temp": data.get('raw_api_key_temp')
+        }
+    }
