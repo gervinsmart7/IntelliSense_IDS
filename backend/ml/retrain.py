@@ -1,5 +1,6 @@
 import os
 import boto3
+from botocore.config import Config
 import pandas as pd
 import tempfile
 import zipfile
@@ -16,7 +17,8 @@ from ml.upload_model import upload_model_to_s3
 from services.notifications import NotificationService
 
 db = get_db()
-s3 = boto3.client('s3', region_name='us-east-1')
+s3 = boto3.client('s3', region_name='us-east-1', config=Config(connect_timeout=10, read_timeout=30, retries={'max_attempts': 2})
+)
 BUCKET_NAME = os.getenv('AWS_BUCKET_NAME', 'intellisense-ids')
 
 def download_current_bundle():

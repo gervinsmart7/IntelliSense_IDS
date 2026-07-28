@@ -284,6 +284,45 @@ def send_admin_invite_email(
 
     return send_email(to_email, subject, html)
 
+def send_agent_status_email(to_emails: list, org_name: str, status: str, timestamp) -> None:
+    """
+    Sends an agent online/offline notification email to an org's
+    configured notification contacts — so admins are informed even
+    when they're not logged into the dashboard.
+    """
+    is_online = status == 'online'
+    subject = (
+        f"✅ Agent Online — {org_name}" if is_online
+        else f"⚠️ Agent Offline — {org_name}"
+    )
+    color = "#34D399" if is_online else "#F87171"
+    headline = "Agent Reconnected" if is_online else "Agent Offline"
+    body_text = (
+        f"Your IntelliSense IDS agent for {org_name} has reconnected "
+        f"and is monitoring your network again."
+        if is_online else
+        f"Your IntelliSense IDS agent for {org_name} has gone offline "
+        f"and is not currently monitoring your network. This can happen "
+        f"if the agent was stopped, the host machine is off, or there's "
+        f"a network issue."
+    )
+
+    html_content = f'''
+        <div style="font-family: Arial, sans-serif; background: #0F1117; color: #E2E8F0; padding: 40px;">
+          <div style="max-width: 520px; margin: 0 auto; background: #1A1D27; border-radius: 16px; padding: 32px; border: 1px solid rgba(255,255,255,0.06);">
+            <p style="font-size: 18px; font-weight: 700; color: {color}; margin-bottom: 12px;">{headline}</p>
+            <p style="font-size: 14px; color: #E2E8F0; line-height: 1.6; margin-bottom: 20px;">{body_text}</p>
+            <p style="font-size: 12px; color: #64748B;">Time: {timestamp}</p>
+            <p style="font-size: 12px; color: #64748B; margin-top: 24px;">IntelliSense IDS — Financial Security Platform</p>
+          </div>
+        </div>
+    '''
+
+    for email in to_emails:
+        try:
+            send_email(email, subject, html_content)
+        except Exception as e:
+            print(f"Agent status email error for {email}: {e}")
 
 def send_critical_alert_email(
     to_emails: list,

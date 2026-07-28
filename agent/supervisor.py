@@ -3,6 +3,7 @@ import time
 import os
 import psutil
 from dotenv import load_dotenv
+import sys
 from cloud.api import get_desired_state, report_process_status
 
 load_dotenv()
@@ -56,7 +57,7 @@ def is_agent_running():
 def start_agent():
     print("Supervisor: starting main.py...")
     proc = subprocess.Popen(
-        ['python3', AGENT_SCRIPT],
+        [sys.executable, AGENT_SCRIPT],
         cwd=get_agent_dir()
     )
     write_pid_file(proc.pid)
