@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers import (
     auth, organisations, agents,
     models, admins, analytics,
-    audit, alerts, notifications
+    audit, alerts, notifications,logs
 )
 from scheduler.jobs import start_scheduler
 from dotenv import load_dotenv
@@ -44,7 +44,7 @@ app.include_router(analytics.router)
 app.include_router(audit.router)
 app.include_router(alerts.router)
 app.include_router(notifications.router)
-
+app.include_router(logs.router)
 @app.on_event("startup")
 async def startup_event():
     start_scheduler()
