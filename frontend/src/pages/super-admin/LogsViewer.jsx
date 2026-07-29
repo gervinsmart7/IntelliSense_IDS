@@ -97,89 +97,88 @@ function LogsViewer() {
         />
       </div>
 
-      {selectedOrg === 'all' ? (
-        <div className="card">
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px' }}>
-            Select a specific organisation above to view its raw captured flows.
-          </p>
-        </div>
-      ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div
-            style={{
-              padding: '16px 20px', borderBottom: '1px solid var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              cursor: 'pointer'
-            }}
-            onClick={function() { setExpanded(!expanded) }}
-          >
-            <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
-              Raw Captured Flows
-            </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <RefreshCw
-                size={16}
-                onClick={function(e) { e.stopPropagation(); loadRawLogs(page) }}
-                style={{ cursor: 'pointer', color: 'var(--text-muted)' }}
-              />
-              {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-            </div>
-          </div>
-
-          {expanded && (
-            <>
-              {rows.length === 0 ? (
-                <div style={{ padding: '32px', textAlign: 'center' }}>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No captured flows yet</p>
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Captured</th>
-                        <th>Prediction</th>
-                        <th>Confidence</th>
-                        <th>Src IP</th>
-                        <th>Dst IP</th>
-                        <th>Dst Port</th>
-                        <th>Protocol</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map(function(row, i) {
-                        return (
-                          <tr key={i}>
-                            <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                              {new Date(row.captured_at).toLocaleString()}
-                            </td>
-                            <td>
-                              <span className={'badge badge-' + (row.prediction === 'BENIGN' ? 'success' : 'danger')}>
-                                {row.prediction}
-                              </span>
-                            </td>
-                            <td style={{ fontSize: '12px' }}>
-                              {((row.confidence || 0) * 100).toFixed(0)}%
-                            </td>
-                            <td style={{ fontSize: '12px', fontFamily: 'monospace' }}>{row['Src IP']}</td>
-                            <td style={{ fontSize: '12px', fontFamily: 'monospace' }}>{row['Dst IP']}</td>
-                            <td style={{ fontSize: '12px' }}>{row['Dst Port']}</td>
-                            <td style={{ fontSize: '12px' }}>{row['Protocol']}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button disabled={page === 0} onClick={function() { loadRawLogs(page - 1) }}>Previous</button>
-                <button disabled={!hasMore} onClick={function() { loadRawLogs(page + 1) }}>Next</button>
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div
+              style={{
+                padding: '16px 20px', borderBottom: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                cursor: 'pointer'
+              }}
+              onClick={function() { setExpanded(!expanded) }}
+            >
+              <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                Raw Captured Flows
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <RefreshCw
+                  size={16}
+                  onClick={function(e) { e.stopPropagation(); loadRawLogs(page) }}
+                  style={{ cursor: 'pointer', color: 'var(--text-muted)' }}
+                />
+                {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </div>
-            </>
-          )}
-        </div>
-      )}
+            </div>
+            
+            {expanded && (
+              <>
+                {rows.length === 0 ? (
+                  <div style={{ padding: '32px', textAlign: 'center' }}>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No captured flows yet</p>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Captured</th>
+                          {selectedOrg === 'all' && <th>Organisation</th>}
+                          <th>Prediction</th>
+                          <th>Confidence</th>
+                          <th>Src IP</th>
+                          <th>Dst IP</th>
+                          <th>Dst Port</th>
+                          <th>Protocol</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(function(row, i) {
+                          return (
+                            <tr key={i}>
+                              <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                {new Date(row.captured_at).toLocaleString()}
+                              </td>
+                              {selectedOrg === 'all' && (
+                                <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                  {row.org_name}
+                                </td>
+                              )}
+                              <td>
+                                <span className={'badge badge-' + (row.prediction === 'BENIGN' ? 'success' : 'danger')}>
+                                  {row.prediction}
+                                </span>
+                              </td>
+                              <td style={{ fontSize: '12px' }}>
+                                {((row.confidence || 0) * 100).toFixed(0)}%
+                              </td>
+                              <td style={{ fontSize: '12px', fontFamily: 'monospace' }}>{row['Src IP']}</td>
+                              <td style={{ fontSize: '12px', fontFamily: 'monospace' }}>{row['Dst IP']}</td>
+                              <td style={{ fontSize: '12px' }}>{row['Dst Port']}</td>
+                              <td style={{ fontSize: '12px' }}>{row['Protocol']}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  <button disabled={page === 0} onClick={function() { loadRawLogs(page - 1) }}>Previous</button>
+                  <button disabled={!hasMore} onClick={function() { loadRawLogs(page + 1) }}>Next</button>
+                </div>
+              </>
+            )}
+          </div>
+          
     </Layout>
   )
 }

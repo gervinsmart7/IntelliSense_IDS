@@ -146,3 +146,84 @@ async def get_all_orgs_logs_summary(
             "by_org": by_org
         }
     }
+
+@router.get("/raw/all")
+async def get_all_orgs_raw_logs(
+    page: int = 0,
+    page_size: int = 50,
+    files_per_org: int = 5,
+    current_admin: dict = Depends(get_current_admin)
+):
+    """
+    Merges recent raw flow rows across ALL active organisations,
+    tagged with org_id/org_name, sorted by capture time.
+
+    To bound memory/S3 usage as the number of orgs grows, only the
+    `files_per_org` most recent log files per org are read — not
+    their entire history. Use the per-org raw endpoint for full
+    historical depth on a single organisation.
+    """
+    if current_admin['role'] not in ('super_admin', 'platform_admin'):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    orgs = db.collection('organisations').where(
+        filter=firestore.FieldFilter('status', '==', 'active')
+    ).get()
+
+    display_cols = [
+        'prediction', 'confidence', 'Src IP', 'Dst IP',
+        'Src Port', 'Dst Port', 'Protocol', 'Flow Duration'
+    ]
+
+    all_rows = []
+
+    for org_doc in orgs:
+        org_data = org_doc.to_dict()
+        org_id = org_data.get('org_id')
+        org_name = org_data.get('name', 'Unknown')
+
+        try:
+            response = s3.list_objects_v2(
+                Bucket=BUCKET_NAME,
+                Prefix=f'logs/{org_id}/'
+            )
+            files = sorted(
+                response.get('Contents', []),
+                key=lambda f: f['LastModified'],
+                reverse=True
+            )[:files_per_org]
+        except Exception as e:
+            print(f"Error listing logs for {org_name}: {e}")
+            continue
+
+        for file in files:
+            try:
+                obj = s3.get_object(Bucket=BUCKET_NAME, Key=file['Key'])
+                df = pd.read_csv(io.BytesIO(obj['Body'].read()))
+                df.columns = df.columns.str.strip()
+
+                cols_present = [c for c in display_cols if c in df.columns]
+                subset = df[cols_present].copy()
+                subset['source_file'] = file['Key'].split('/')[-1]
+                subset['captured_at'] = file['LastModified'].isoformat()
+                subset['org_id'] = org_id
+                subset['org_name'] = org_name
+
+                all_rows.extend(subset.to_dict('records'))
+            except Exception as e:
+                print(f"Error reading {file['Key']}: {e}")
+                continue
+
+    all_rows.sort(key=lambda r: r['captured_at'], reverse=True)
+
+    start = page * page_size
+    end = start + page_size
+    page_rows = all_rows[start:end]
+
+    return {
+        "status": "success",
+        "data": page_rows,
+        "page": page,
+        "page_size": page_size,
+        "has_more": len(all_rows) > end
+    }
