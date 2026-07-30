@@ -8,6 +8,10 @@ from services.baseline import update_all_baselines
 from services.kill_chain import check_kill_chain
 import logging
 
+from datetime import datetime, timedelta, timezone
+
+RETRAIN_MAX_RUNTIME = timedelta(hours=2)
+
 db = get_db()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -406,6 +410,50 @@ def daily_security_briefing_job():
     except Exception as e:
         logger.error(f"Daily briefing job error: {e}")
 
+def fail_stuck_retrain_jobs_job():
+    """Fail retraining jobs left running after their allowed runtime."""
+    cutoff = datetime.now(timezone.utc) - RETRAIN_MAX_RUNTIME
+
+    try:
+        jobs = (
+            db.collection('retrain_jobs')
+            .where(
+                filter=firestore.FieldFilter(
+                    'status', '==', 'running'
+                )
+            )
+            .where(
+                filter=firestore.FieldFilter(
+                    'started_at', '<=', cutoff
+                )
+            )
+            .stream()
+        )
+
+        failed_count = 0
+        for job in jobs:
+            # This must match the fields consumed by your retraining UI/API.
+            job.reference.update({
+                'status': 'failed',
+                'error': (
+                    'Retraining exceeded the 2-hour execution limit and '
+                    'was marked failed by the watchdog. The worker may '
+                    'have been interrupted by a restart or OS termination.'
+                ),
+                'finished_at': firestore.SERVER_TIMESTAMP,
+                'failure_reason': 'watchdog_timeout',
+            })
+            failed_count += 1
+
+        if failed_count:
+            logger.warning(
+                "Watchdog marked %d stale retraining job(s) as failed",
+                failed_count,
+            )
+
+    except Exception as e:
+        logger.exception("Retraining watchdog error: %s", e)
+
 def start_scheduler():
     """Starts all scheduled jobs"""
     interval_days = get_retrain_interval()
@@ -445,9 +493,33 @@ def start_scheduler():
         name='Organisation Baseline Update',
         replace_existing=True
     )
+        scheduler.add_job(
+        fail_stuck_retrain_jobs_job,
+        trigger=IntervalTrigger(minutes=15),
+        id='retrain_watchdog',
+        name='Stuck Retraining Job Watchdog',
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+            check_kill_chains_job,
+            trigger=IntervalTrigger(hours=1),
+            id='kill_chain_check',
+            name='Kill Chain Detection',
+            replace_existing=True
+        )
+    
+        # Daily security briefing at 8am UTC
+        scheduler.add_job(
+            daily_security_briefing_job,
+            trigger=CronTrigger(hour=8, minute=0),
+            id='daily_briefing',
+            name='Daily Security Briefing',
+            replace_existing=True
+        )
 
     # Kill chain check hourly
-
 def check_all_kill_chains():
     try:
         db = get_db()
@@ -461,22 +533,6 @@ def check_all_kill_chains():
     except Exception as e:
         print(f"Kill chain check error: {e}")
 
-    scheduler.add_job(
-        check_kill_chains_job,
-        trigger=IntervalTrigger(hours=1),
-        id='kill_chain_check',
-        name='Kill Chain Detection',
-        replace_existing=True
-    )
-
-    # Daily security briefing at 8am UTC
-    scheduler.add_job(
-        daily_security_briefing_job,
-        trigger=CronTrigger(hour=8, minute=0),
-        id='daily_briefing',
-        name='Daily Security Briefing',
-        replace_existing=True
-    )
 
     scheduler.start()
     logger.info(

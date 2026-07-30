@@ -20,6 +20,7 @@ db = get_db()
 s3 = boto3.client('s3', region_name='us-east-1', config=Config(connect_timeout=10, read_timeout=30, retries={'max_attempts': 2})
 )
 BUCKET_NAME = os.getenv('AWS_BUCKET_NAME', 'intellisense-ids')
+MAX_FILES_PER_ORG = 50
 
 def download_current_bundle():
     """
@@ -74,7 +75,7 @@ def fetch_all_org_logs():
                 Bucket=BUCKET_NAME,
                 Prefix=f'logs/{org_id}/'
             )
-            files = response.get('Contents', [])
+            files = sorted(files, key=lambda f: f['LastModified'], reverse=True)[:MAX_FILES_PER_ORG]
             for file in files:
                 try:
                     obj = s3.get_object(
@@ -86,6 +87,7 @@ def fetch_all_org_logs():
                     if 'Label' in df.columns or 'label' in df.columns:
                         all_dataframes.append(df)
                         total_files += 1
+                    del df
                 except Exception as e:
                     print(f"Error reading {file['Key']}: {e}")
                     continue
